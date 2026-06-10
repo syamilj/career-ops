@@ -14,11 +14,18 @@ type CareerApplication struct {
 	ReportNumber string
 	Notes        string
 	JobURL       string // URL of the original job posting
+	// Parsed from Notes (always available)
+	Remote       string // On-site, Hybrid, Remote, Internship, Contract
+	Location     string // Country/city from notes
+	CompEstimate string // Salary estimate from notes
 	// Enrichment (lazy loaded from report)
-	Archetype    string
-	TlDr         string
-	Remote       string
-	CompEstimate string
+	Archetype string
+	TlDr      string
+	Domain    string // Industry domain from report
+	Seniority string // Level from report
+	// Liveness (populated from cache / background checks)
+	Liveness       string // "", "checking", "active", "expired", "uncertain", "error"
+	LivenessReason string
 }
 
 // PipelineMetrics holds aggregate stats for the pipeline dashboard.
@@ -48,10 +55,10 @@ type ProgressMetrics struct {
 	OfferRate     float64 // Offer / Applied
 
 	// Averages
-	AvgScore     float64
-	TopScore     float64
-	TotalOffers  int
-	ActiveApps int // not skip/rejected/discarded
+	AvgScore    float64
+	TopScore    float64
+	TotalOffers int
+	ActiveApps  int // not skip/rejected/discarded
 }
 
 // FunnelStage represents one stage of the application funnel.

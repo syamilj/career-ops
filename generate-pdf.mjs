@@ -77,7 +77,8 @@ function normalizeTextForATS(html) {
     t = t.replace(/\s*[\u2191\u2193]\s*/g, () => { bump('vert-arrow', 1); return ' '; });
     // Middle dot and bullet glyphs garble in some extractors \u2014 replace with pipe.
     t = t.replace(/\s*\u00B7\s*/g, () => { bump('middot', 1); return ' | '; });
-    t = t.replace(/\s*\u2022\s*/g, () => { bump('bullet', 1); return ' | '; });
+    // Note: bullet (•) is intentionally NOT converted — it is a standard
+    // list-marker glyph that renders correctly in PDF and ATS parsers handle it fine.
     // Currency symbols sometimes stripped by font-subsetted PDFs \u2014 spell out
     // the unambiguous ones. \u00A5 is intentionally NOT converted: it maps to both
     // Japanese Yen (JPY) and Chinese Yuan (CNY), so any spelled-out code would be
@@ -165,10 +166,10 @@ async function generatePDF() {
       format: format,
       printBackground: true,
       margin: {
-        top: '0.6in',
-        right: '0.6in',
-        bottom: '0.6in',
-        left: '0.6in',
+        top: '0.4in',
+        right: '0.4in',
+        bottom: '0.4in',
+        left: '0.4in',
       },
       preferCSSPageSize: false,
     });

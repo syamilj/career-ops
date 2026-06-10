@@ -32,6 +32,8 @@ Read `config/profile.yml`. Check `cv.output_format`:
 - If `"latex"`, execute the full pipeline from `modes/latex.md`
 - Otherwise (default), execute the full pipeline from `modes/pdf.md`
 
+**Important:** The PDF mode now determines the document type (`cv` or `resume`) based on the JD and uses `templates/cv-example.html` as the primary design template. Follow the naming convention in `modes/pdf.md`.
+
 ## Step 4 — Draft Application Answers (only if score >= 4.5)
 
 If the final score is >= 4.5, generate a draft of responses for the application form:

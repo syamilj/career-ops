@@ -9,17 +9,38 @@
 5. Detect company location → paper format:
    - US/Canada → `letter`
    - Rest of the world → `a4`
-6. Detect role archetype → adapt framing
-7. Rewrite Professional Summary by injecting JD keywords + exit narrative bridge ("Built and sold a business. Now applying systems thinking to [JD domain].")
-8. Select top 3-4 most relevant projects for the job
-9. Reorder experience bullets by JD relevance
-10. Build competency grid from JD requirements (6-8 keyword phrases)
-11. Inject keywords naturally into existing achievements (NEVER invent)
-12. Generate full HTML from template + personalized content
-13. Read `name` from `config/profile.yml` → normalize to kebab-case lowercase (e.g. "John Doe" → "john-doe") → `{candidate}`
-14. Write HTML to `/tmp/cv-{candidate}-{company}.html`
-15. Execute: `node generate-pdf.mjs /tmp/cv-{candidate}-{company}.html output/cv-{candidate}-{company}-{YYYY-MM-DD}.pdf --format={letter|a4}`
-16. Report: PDF path, number of pages, keyword coverage %
+6. **Determine document type** (see Naming Convention below) → `cv` or `resume`
+7. Detect role archetype → adapt framing
+8. Rewrite Professional Summary by injecting JD keywords + exit narrative bridge ("Built and sold a business. Now applying systems thinking to [JD domain].")
+9. Select top 3-4 most relevant projects for the job
+10. Reorder experience bullets by JD relevance
+11. Build competency grid from JD requirements (6-8 keyword phrases)
+12. Inject keywords naturally into existing achievements (NEVER invent)
+13. Generate full HTML from **`templates/cv-example.html`** as the design reference + personalized content
+14. Read `name` from `config/profile.yml` → normalize to kebab-case lowercase (e.g. "John Doe" → "john-doe") → `{candidate}`
+15. Write HTML to `/tmp/{doc_type}-{candidate}-{company}.html`
+16. Execute: `node generate-pdf.mjs /tmp/{doc_type}-{candidate}-{company}.html output/{doc_type}-{candidate}-{company}-{YYYY-MM-DD}.pdf --format={letter|a4}`
+17. Report: PDF path, number of pages, keyword coverage %
+
+## Naming Convention: CV vs Resume
+
+Determine whether to name the document `cv` or `resume` based on the JD:
+
+| Signal | Use `resume` | Use `cv` |
+|--------|-------------|----------|
+| JD says "submit your resume" | ✅ | |
+| JD says "submit your CV" | | ✅ |
+| Company is US/Canada-based | ✅ (default) | |
+| Company is UK/Europe/Asia/Middle East/Africa | | ✅ (default) |
+| Role is academic/research/medical | | ✅ |
+| JD uses "curriculum vitae" | | ✅ |
+| No clear signal, Indonesia-based | | ✅ (default) |
+
+**Filename format:** `{doc_type}-{candidate}-{company}-{YYYY-MM-DD}.pdf`
+- Example: `resume-syamil-jihad-gojek-2026-06-09.pdf`
+- Example: `cv-syamil-jihad-mckinsey-2026-06-09.pdf`
+
+**In the HTML `<title>` tag**, use the same doc type: `{NAME} — Resume` or `{NAME} — CV`.
 
 ## ATS Rules (clean parsing)
 
@@ -33,24 +54,31 @@
 
 ## PDF Design
 
-- **Fonts**: Space Grotesk (headings, 600-700) + DM Sans (body, 400-500)
-- **Fonts self-hosted**: `fonts/`
-- **Header**: name in Space Grotesk 24px bold + gradient line `linear-gradient(to right, hsl(187,74%,32%), hsl(270,70%,45%))` 2px + contact row
-- **Section headers**: Space Grotesk 13px, uppercase, letter-spacing 0.05em, color cyan primary
-- **Body**: DM Sans 11px, line-height 1.5
-- **Company names**: accent purple color `hsl(270,70%,45%)`
-- **Margins**: 0.6in
+**Primary template: `templates/cv-example.html`** — Use this as the design reference. It has the approved styling:
+
+- **Font**: Calibri (fallback: Segoe UI, Helvetica Neue, Arial)
+- **Name**: 14pt bold, color `#8064A2` (purple), centered
+- **Section headers**: 9.5pt bold, uppercase, color `#2B5797` (blue), with bottom border
+- **Body text**: 9pt, line-height 1.3, color `#333333`
+- **Company names**: 9.5pt bold
+- **Role titles**: 9pt italic
+- **Page**: A4, padding `6pt 12pt 4pt 12pt` (CSS) + `0.4in` Playwright margins
 - **Background**: pure white
+- **Layout**: Education section comes BEFORE Experience (candidate's preference)
 
-## Section order (optimized "6-second recruiter scan")
+**Alternative template: `templates/cv-template.html`** — Space Grotesk + DM Sans design with gradient header. Use only if the user explicitly requests a different visual style.
 
-1. Header (large name, gradient, contact, portfolio link)
-2. Professional Summary (3-4 lines, keyword-dense)
-3. Core Competencies (6-8 keyword phrases in flex-grid)
-4. Work Experience (reverse chronological)
-5. Projects (top 3-4 most relevant)
-6. Education & Certifications
-7. Skills (languages + technical)
+**MARGINS (CRITICAL):** Playwright PDF margins are set to `0.4in` on all sides in `generate-pdf.mjs`. The CSS `.page` padding should be `6pt 12pt 4pt 12pt`. Do NOT set Playwright margins to 0 — it makes the CV mepet ke ujung. Do NOT set them to 0.6in — it wastes too much space.
+
+## Section order (optimized for this candidate)
+
+Based on `templates/cv-example.html`:
+
+1. Header (name, contact info, LinkedIn, GitHub)
+2. Professional Summary (2-3 lines, keyword-dense, italic)
+3. Education (placed early — strong GPA + FMVA/CFA certifications signal competence)
+4. Professional Experience (reverse chronological)
+5. Additional Information (Awards, Languages & Certifications, Technical Skills)
 
 ## Keyword injection strategy (ethical, truth-based)
 
@@ -63,7 +91,9 @@ Examples of legitimate reformulation:
 
 ## Template HTML
 
-Use the template in `cv-template.html`. Replace the `{{...}}` placeholders with personalized content:
+**Primary:** Use `templates/cv-example.html` as the base. Copy it to `/tmp/{doc_type}-{candidate}-{company}.html`, then replace the content (name, summary, experience, education, skills, awards) with personalized content from `cv.md` + JD keywords. Keep the CSS and structure intact.
+
+**Alternative:** Use `templates/cv-template.html` with `{{...}}` placeholders only if the user requests the Space Grotesk design.
 
 | Placeholder | Content |
 |-------------|-----------|

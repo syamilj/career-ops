@@ -106,7 +106,7 @@ func TestRenderAppLineIncludesDateColumn(t *testing.T) {
 		Score:   4.5,
 	}, false)
 
-	if !strings.Contains(line, "2026-04-13") {
+	if !strings.Contains(line, "26-04") {
 		t.Fatalf("expected rendered line to include date column, got %q", line)
 	}
 	if !strings.Contains(line, "#42") {

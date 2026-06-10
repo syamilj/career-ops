@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
+	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -23,6 +25,9 @@ const (
 	viewProgress
 )
 
+// shellDoneMsg signals that a `!` shell command finished and the TUI resumed.
+type shellDoneMsg struct{ err error }
+
 type appModel struct {
 	pipeline        screens.PipelineModel
 	viewer          screens.ViewerModel
@@ -31,6 +36,34 @@ type appModel struct {
 	careerOpsPath   string
 	theme           theme.Theme
 	progressMetrics model.ProgressMetrics
+	// livenessSem bounds concurrent HTTP liveness checks to 3 workers.
+	livenessSem chan struct{}
+	cacheMu     *sync.Mutex
+}
+
+// checkLivenessCmd returns a tea.Cmd that checks one URL (bounded by the semaphore)
+// and reports back via LivenessResultMsg.
+func (m appModel) checkLivenessCmd(url string, hybrid bool) tea.Cmd {
+	sem := m.livenessSem
+	path := m.careerOpsPath
+	return func() tea.Msg {
+		sem <- struct{}{}
+		defer func() { <-sem }()
+		var res data.LivenessResult
+		if hybrid {
+			res = data.CheckLivenessHybrid(context.Background(), path, url)
+		} else {
+			res = data.CheckLivenessHTTP(context.Background(), url)
+		}
+		return screens.LivenessResultMsg{URL: url, Result: res}
+	}
+}
+
+// persistLivenessCache writes the current liveness snapshot to disk.
+func (m appModel) persistLivenessCache() {
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
+	_ = data.SaveLivenessCache(m.careerOpsPath, m.pipeline.LivenessSnapshot())
 }
 
 func (m *appModel) reloadPipelineData() {
@@ -41,7 +74,17 @@ func (m *appModel) reloadPipelineData() {
 }
 
 func (m appModel) Init() tea.Cmd {
-	return nil
+	// Kick off background liveness checks for stale URLs (HTTP-only, 3 workers).
+	urls := m.pipeline.StaleURLs()
+	if len(urls) == 0 {
+		return nil
+	}
+	m.pipeline.MarkChecking(urls)
+	cmds := make([]tea.Cmd, 0, len(urls))
+	for _, u := range urls {
+		cmds = append(cmds, m.checkLivenessCmd(u, false))
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -62,8 +105,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case screens.PipelineLoadReportMsg:
-		archetype, tldr, remote, comp := data.LoadReportSummary(msg.CareerOpsPath, msg.ReportPath)
-		m.pipeline.EnrichReport(msg.ReportPath, archetype, tldr, remote, comp)
+		archetype, tldr, remote, comp, domain, seniority := data.LoadReportSummary(msg.CareerOpsPath, msg.ReportPath)
+		m.pipeline.EnrichReport(msg.ReportPath, archetype, tldr, remote, comp, domain, seniority)
 		return m, nil
 
 	case screens.PipelineUpdateStatusMsg:
@@ -76,6 +119,63 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case screens.PipelineRefreshMsg:
+		m.reloadPipelineData()
+		return m, nil
+
+	case screens.PipelineCheckLivenessMsg:
+		cmds := make([]tea.Cmd, 0, len(msg.URLs))
+		for _, u := range msg.URLs {
+			cmds = append(cmds, m.checkLivenessCmd(u, msg.Hybrid))
+		}
+		return m, tea.Batch(cmds...)
+
+	case screens.LivenessResultMsg:
+		m.pipeline.SetLiveness(msg.URL, msg.Result)
+		m.persistLivenessCache()
+		return m, nil
+
+	case screens.PipelineUpdateURLMsg:
+		if err := data.UpdateJobURL(msg.CareerOpsPath, msg.App, msg.NewURL); err != nil {
+			m.pipeline.SetStatusMsg("URL update failed: " + err.Error())
+			return m, nil
+		}
+		m.reloadPipelineData()
+		m.pipeline.SetStatusMsg("URL saved to " + msg.App.ReportPath)
+		// Old URL's liveness no longer applies; check the new one.
+		return m, m.checkLivenessCmd(msg.NewURL, false)
+
+	case screens.PipelineUpdateNotesMsg:
+		if err := data.UpdateApplicationNotes(msg.CareerOpsPath, msg.App, msg.NewNotes); err != nil {
+			m.pipeline.SetStatusMsg("notes update failed: " + err.Error())
+			return m, nil
+		}
+		m.reloadPipelineData()
+		m.pipeline.SetStatusMsg("notes updated")
+		return m, nil
+
+	case screens.PipelineAddEntryMsg:
+		num, err := data.AddApplication(msg.CareerOpsPath, msg.URL, msg.Company, "")
+		if err != nil {
+			m.pipeline.SetStatusMsg("add failed: " + err.Error())
+			return m, nil
+		}
+		m.reloadPipelineData()
+		m.pipeline.SetStatusMsg(fmt.Sprintf("entry #%d added — checking liveness…", num))
+		return m, m.checkLivenessCmd(msg.URL, false)
+
+	case screens.PipelineExecShellMsg:
+		c := exec.Command("zsh", "-ic", msg.Command)
+		c.Dir = m.careerOpsPath
+		return m, tea.ExecProcess(c, func(err error) tea.Msg {
+			return shellDoneMsg{err: err}
+		})
+
+	case shellDoneMsg:
+		if msg.err != nil {
+			m.pipeline.SetStatusMsg("shell exited with error: " + msg.err.Error())
+		} else {
+			m.pipeline.SetStatusMsg("shell command finished — data reloaded")
+		}
 		m.reloadPipelineData()
 		return m, nil
 
@@ -176,17 +276,22 @@ func main() {
 		if app.ReportPath == "" {
 			continue
 		}
-		archetype, tldr, remote, comp := data.LoadReportSummary(careerOpsPath, app.ReportPath)
-		if archetype != "" || tldr != "" || remote != "" || comp != "" {
-			pm.EnrichReport(app.ReportPath, archetype, tldr, remote, comp)
+		archetype, tldr, remote, comp, domain, seniority := data.LoadReportSummary(careerOpsPath, app.ReportPath)
+		if archetype != "" || tldr != "" || remote != "" || comp != "" || domain != "" || seniority != "" {
+			pm.EnrichReport(app.ReportPath, archetype, tldr, remote, comp, domain, seniority)
 		}
 	}
+
+	// Seed liveness state from the on-disk cache (24h TTL).
+	pm.SeedLivenessCache(data.LoadLivenessCache(careerOpsPath))
 
 	m := appModel{
 		pipeline:        pm,
 		careerOpsPath:   careerOpsPath,
 		theme:           t,
 		progressMetrics: progressMetrics,
+		livenessSem:     make(chan struct{}, 3),
+		cacheMu:         &sync.Mutex{},
 	}
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
