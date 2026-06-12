@@ -46,6 +46,45 @@ type PipelineUpdateStatusMsg struct {
 // PipelineRefreshMsg requests a full tracker reload from disk.
 type PipelineRefreshMsg struct{}
 
+// PipelineCheckLivenessMsg requests liveness checks for the given URLs.
+type PipelineCheckLivenessMsg struct {
+	URLs   []string
+	Hybrid bool // escalate uncertain results to Playwright
+}
+
+// LivenessResultMsg carries the outcome of a single liveness check.
+type LivenessResultMsg struct {
+	URL    string
+	Result data.LivenessResult
+}
+
+// PipelineUpdateURLMsg requests writing a new job URL into the report file.
+type PipelineUpdateURLMsg struct {
+	CareerOpsPath string
+	App           model.CareerApplication
+	NewURL        string
+	OldURL        string
+}
+
+// PipelineUpdateNotesMsg requests a notes update in applications.md.
+type PipelineUpdateNotesMsg struct {
+	CareerOpsPath string
+	App           model.CareerApplication
+	NewNotes      string
+}
+
+// PipelineExecShellMsg requests running a shell command (TUI suspends meanwhile).
+type PipelineExecShellMsg struct {
+	Command string
+}
+
+// PipelineAddEntryMsg requests a quick-add of a new tracker entry (URL only).
+type PipelineAddEntryMsg struct {
+	CareerOpsPath string
+	URL           string
+	Company       string // optional — derived from URL host when empty
+}
+
 // PipelineOpenProgressMsg is emitted when the progress screen should open.
 type PipelineOpenProgressMsg struct{}
 
@@ -54,6 +93,8 @@ type reportSummary struct {
 	tldr      string
 	remote    string
 	comp      string
+	domain    string
+	seniority string
 }
 
 // Sort modes
@@ -122,6 +163,32 @@ type PipelineModel struct {
 	// Search sub-state — narrows the active tab by substring on company/role/notes.
 	searchInput bool   // true while the user is typing the query
 	searchQuery string // committed (or in-progress) lowercased query
+	// Input-bar sub-state for command (:), shell (!), and URL edit (u) modes.
+	inputMode  string // "" | "command" | "shell" | "url"
+	inputText  string
+	statusMsg  string // one-line feedback shown in the help area; cleared on next keypress
+	liveness   map[string]data.LivenessResult
+	checkingNo map[string]bool // URLs currently being checked
+	// Help overlay sub-state
+	showHelp bool
+	// Compare mode sub-state
+	compareMode     bool
+	compareSelected map[int]bool // indices of selected items for comparison
+	// Expandable rows sub-state
+	expandedRows map[int]bool // indices of expanded rows
+	// Inline editing sub-state
+	editingRow   int    // index of row being edited (-1 if none)
+	editingField string // "notes", "status", etc.
+	editingText  string // current editing text
+	// Multi-select sub-state
+	multiSelectMode bool
+	selectedRows    map[int]bool // indices of selected rows
+	// Drag and drop sub-state
+	dragMode    bool
+	dragIndex   int // index of row being dragged
+	dropIndex   int // index of drop target
+	// Compact mode - skip header/tabs/metrics when in sidebar layout
+	compact bool
 }
 
 // NewPipelineModel creates a new pipeline screen.
@@ -159,6 +226,14 @@ func (m PipelineModel) Width() int { return m.width }
 // Height returns the current height.
 func (m PipelineModel) Height() int { return m.height }
 
+// SetCompact enables compact mode - skips header/tabs/metrics when in sidebar layout.
+func (m *PipelineModel) SetCompact(compact bool) {
+	m.compact = compact
+}
+
+// SetStatusMsg sets the transient one-line feedback message.
+func (m *PipelineModel) SetStatusMsg(s string) { m.statusMsg = s }
+
 // CopyReportCache copies the report cache from another pipeline model.
 func (m *PipelineModel) CopyReportCache(other *PipelineModel) {
 	for k, v := range other.reportCache {
@@ -167,12 +242,14 @@ func (m *PipelineModel) CopyReportCache(other *PipelineModel) {
 }
 
 // EnrichReport caches report summary data for preview.
-func (m *PipelineModel) EnrichReport(reportPath, archetype, tldr, remote, comp string) {
+func (m *PipelineModel) EnrichReport(reportPath, archetype, tldr, remote, comp, domain, seniority string) {
 	m.reportCache[reportPath] = reportSummary{
 		archetype: archetype,
 		tldr:      tldr,
 		remote:    remote,
 		comp:      comp,
+		domain:    domain,
+		seniority: seniority,
 	}
 }
 
@@ -233,6 +310,60 @@ func (m PipelineModel) CurrentApp() (model.CareerApplication, bool) {
 		return model.CareerApplication{}, false
 	}
 	return m.filtered[m.cursor], true
+}
+
+// SetLiveness stores a liveness result for a URL (called from main on LivenessResultMsg).
+func (m *PipelineModel) SetLiveness(url string, r data.LivenessResult) {
+	m.liveness[url] = r
+	delete(m.checkingNo, url)
+}
+
+// SeedLivenessCache pre-populates liveness state from the on-disk cache.
+func (m *PipelineModel) SeedLivenessCache(cache map[string]data.LivenessResult) {
+	for k, v := range cache {
+		m.liveness[k] = v
+	}
+}
+
+// LivenessSnapshot returns a copy of the current liveness map (for cache persistence).
+func (m PipelineModel) LivenessSnapshot() map[string]data.LivenessResult {
+	out := make(map[string]data.LivenessResult, len(m.liveness))
+	for k, v := range m.liveness {
+		out[k] = v
+	}
+	return out
+}
+
+// MarkChecking flags URLs as in-flight so the UI shows a spinner cell.
+func (m *PipelineModel) MarkChecking(urls []string) {
+	for _, u := range urls {
+		m.checkingNo[u] = true
+	}
+}
+
+// StaleURLs returns job URLs that need a (re)check: present, non-terminal
+// status, and no fresh cached result.
+func (m PipelineModel) StaleURLs() []string {
+	seen := make(map[string]bool)
+	var out []string
+	for _, app := range m.apps {
+		if app.JobURL == "" || seen[app.JobURL] {
+			continue
+		}
+		norm := data.NormalizeStatus(app.Status)
+		if norm == "rejected" || norm == "discarded" || norm == "skip" {
+			continue
+		}
+		if r, ok := m.liveness[app.JobURL]; ok && r.IsFresh() {
+			continue
+		}
+		if m.checkingNo[app.JobURL] {
+			continue
+		}
+		seen[app.JobURL] = true
+		out = append(out, app.JobURL)
+	}
+	return out
 }
 
 // Update handles input for the pipeline screen.

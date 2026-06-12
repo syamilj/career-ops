@@ -2,6 +2,7 @@ package data
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -24,6 +25,10 @@ var (
 	reArchetypeColon = regexp.MustCompile(`(?i)\*\*Arquetipo:\*\*\s*(.+)`)
 	reReportURL      = regexp.MustCompile(`(?m)^\*\*URL:\*\*\s*(https?://\S+)`)
 	reBatchID        = regexp.MustCompile(`(?m)^\*\*Batch ID:\*\*\s*(\d+)`)
+	reDomain         = regexp.MustCompile(`(?i)\*\*Domain\*\*\s*\|\s*(.+)`)
+	reSeniority      = regexp.MustCompile(`(?i)\*\*Seniority\*\*\s*\|\s*(.+)`)
+	reDomainColon    = regexp.MustCompile(`(?i)\*\*Domain:\*\*\s*(.+)`)
+	reSeniorityColon = regexp.MustCompile(`(?i)\*\*Seniority:\*\*\s*(.+)`)
 )
 
 // resolveReportPath converts a report link from the tracker into a path
@@ -531,7 +536,7 @@ func NormalizeStatus(raw string) string {
 }
 
 // LoadReportSummary extracts key fields from a report file.
-func LoadReportSummary(careerOpsPath, reportPath string) (archetype, tldr, remote, comp string) {
+func LoadReportSummary(careerOpsPath, reportPath string) (archetype, tldr, remote, comp, domain, seniority string) {
 	fullPath := filepath.Join(careerOpsPath, reportPath)
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
@@ -558,6 +563,18 @@ func LoadReportSummary(careerOpsPath, reportPath string) (archetype, tldr, remot
 
 	if m := reComp.FindStringSubmatch(text); m != nil {
 		comp = cleanTableCell(m[1])
+	}
+
+	if m := reDomain.FindStringSubmatch(text); m != nil {
+		domain = cleanTableCell(m[1])
+	} else if m := reDomainColon.FindStringSubmatch(text); m != nil {
+		domain = cleanTableCell(m[1])
+	}
+
+	if m := reSeniority.FindStringSubmatch(text); m != nil {
+		seniority = cleanTableCell(m[1])
+	} else if m := reSeniorityColon.FindStringSubmatch(text); m != nil {
+		seniority = cleanTableCell(m[1])
 	}
 
 	// Truncate long fields
@@ -601,6 +618,204 @@ func UpdateApplicationStatus(careerOpsPath string, app model.CareerApplication, 
 	}
 
 	return os.WriteFile(filePath, []byte(strings.Join(lines, "\n")), 0644)
+}
+
+// AddApplication creates a new tracker entry for a job URL.
+func AddApplication(careerOpsPath, jobURL, company, role string) (int, error) {
+	if !strings.HasPrefix(jobURL, "http://") && !strings.HasPrefix(jobURL, "https://") {
+		return 0, fmt.Errorf("URL must start with http:// or https://")
+	}
+
+	filePath := filepath.Join(careerOpsPath, "applications.md")
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		filePath = filepath.Join(careerOpsPath, "data", "applications.md")
+		content, err = os.ReadFile(filePath)
+		if err != nil {
+			return 0, fmt.Errorf("applications.md not found: %w", err)
+		}
+	}
+
+	text := string(content)
+
+	// Duplicate guard: same URL already tracked.
+	if strings.Contains(text, jobURL) {
+		return 0, fmt.Errorf("URL already tracked")
+	}
+
+	// Next number = max existing + 1.
+	maxNum := 0
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "|") || strings.HasPrefix(trimmed, "|-") || strings.HasPrefix(trimmed, "| #") {
+			continue
+		}
+		fields := strings.SplitN(strings.Trim(trimmed, "|"), "|", 2)
+		if len(fields) == 0 {
+			continue
+		}
+		if n, err := strconv.Atoi(strings.TrimSpace(fields[0])); err == nil && n > maxNum {
+			maxNum = n
+		}
+	}
+	num := maxNum + 1
+
+	if company == "" {
+		company = companyFromURL(jobURL)
+	}
+	if role == "" {
+		role = "-"
+	}
+
+	today := time.Now().Format("2006-01-02")
+	row := fmt.Sprintf("| %d | %s | %s | %s | - | Evaluated | ❌ |  | %s |",
+		num, today, company, role, jobURL)
+
+	if !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	text += row + "\n"
+
+	return num, os.WriteFile(filePath, []byte(text), 0o644)
+}
+
+// companyFromURL derives a readable company name from a job posting URL host.
+func companyFromURL(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "?"
+	}
+	host := strings.TrimPrefix(parsed.Hostname(), "www.")
+
+	atsHosts := map[string]bool{
+		"boards.greenhouse.io": true, "jobs.lever.co": true,
+		"jobs.ashbyhq.com": true, "apply.workable.com": true,
+		"jobs.smartrecruiters.com": true, "wellfound.com": true,
+	}
+	if atsHosts[parsed.Hostname()] || atsHosts[host] {
+		segs := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+		if len(segs) > 0 && segs[0] != "" {
+			return titleCaseSlug(segs[0])
+		}
+	}
+
+	for _, prefix := range []string{"careers.", "jobs.", "career.", "apply.", "join.", "work."} {
+		host = strings.TrimPrefix(host, prefix)
+	}
+	parts := strings.Split(host, ".")
+	if len(parts) > 0 {
+		return titleCaseSlug(parts[0])
+	}
+	return "?"
+}
+
+func titleCaseSlug(s string) string {
+	s = strings.NewReplacer("-", " ", "_", " ").Replace(s)
+	words := strings.Fields(s)
+	for i, w := range words {
+		if len(w) > 0 {
+			words[i] = strings.ToUpper(w[:1]) + w[1:]
+		}
+	}
+	return strings.Join(words, " ")
+}
+
+// UpdateJobURL writes a new job URL into the report file's **URL:** line.
+func UpdateJobURL(careerOpsPath string, app model.CareerApplication, newURL string) error {
+	if app.ReportPath == "" {
+		return fmt.Errorf("no report file for %s — cannot store URL", app.Company)
+	}
+	if !strings.HasPrefix(newURL, "http://") && !strings.HasPrefix(newURL, "https://") {
+		return fmt.Errorf("URL must start with http:// or https://")
+	}
+
+	fullPath := filepath.Join(careerOpsPath, app.ReportPath)
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		return fmt.Errorf("cannot read report: %w", err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+
+	// Replace existing **URL:** line if present.
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "**URL:**") {
+			lines[i] = "**URL:** " + newURL
+			return os.WriteFile(fullPath, []byte(strings.Join(lines, "\n")), 0o644)
+		}
+	}
+
+	// Insert after **Score:** line, or after the first heading as fallback.
+	insertAt := -1
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "**Score:**") {
+			insertAt = i + 1
+			break
+		}
+	}
+	if insertAt == -1 {
+		for i, line := range lines {
+			if strings.HasPrefix(line, "#") {
+				insertAt = i + 1
+				break
+			}
+		}
+	}
+	if insertAt == -1 {
+		insertAt = 0
+	}
+
+	urlLine := "**URL:** " + newURL
+	lines = append(lines[:insertAt], append([]string{urlLine}, lines[insertAt:]...)...)
+	return os.WriteFile(fullPath, []byte(strings.Join(lines, "\n")), 0o644)
+}
+
+// UpdateApplicationNotes updates the Notes column of an application row in
+// applications.md, matched by report number.
+func UpdateApplicationNotes(careerOpsPath string, app model.CareerApplication, newNotes string) error {
+	filePath := filepath.Join(careerOpsPath, "applications.md")
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		filePath = filepath.Join(careerOpsPath, "data", "applications.md")
+		content, err = os.ReadFile(filePath)
+		if err != nil {
+			return err
+		}
+	}
+
+	newNotes = strings.NewReplacer("|", "/", "\n", " ", "\t", " ").Replace(newNotes)
+
+	lines := strings.Split(string(content), "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "|") {
+			continue
+		}
+		if app.ReportNumber == "" || !strings.Contains(line, fmt.Sprintf("[%s]", app.ReportNumber)) {
+			continue
+		}
+		if strings.Contains(line, "\t") {
+			parts := strings.Split(line, "\t")
+			if len(parts) < 9 {
+				return fmt.Errorf("unexpected tracker row format")
+			}
+			suffix := ""
+			if strings.HasSuffix(strings.TrimSpace(parts[8]), "|") {
+				suffix = " |"
+			}
+			parts[8] = newNotes + suffix
+			lines[i] = strings.Join(parts, "\t")
+		} else {
+			parts := strings.Split(line, "|")
+			if len(parts) < 11 {
+				return fmt.Errorf("unexpected tracker row format")
+			}
+			parts[9] = " " + newNotes + " "
+			lines[i] = strings.Join(parts, "|")
+		}
+		return os.WriteFile(filePath, []byte(strings.Join(lines, "\n")), 0o644)
+	}
+	return fmt.Errorf("application not found: report %s", app.ReportNumber)
 }
 
 // replaceStatusInLine replaces the old status with new status in a table line.
