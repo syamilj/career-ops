@@ -1,78 +1,93 @@
 url	state	reason	checked_at
-https://www.linkedin.com/jobs/search/?keywords=Deloitte%20Associate%2C%20Business%20Intelligence&location=Jakarta	active	apply control visible	2026-06-12T07:20:13+07:00
+https://www.nestle.co.id/jobs/students-graduates/management-trainee	expired	insufficient content — likely nav/footer only	2026-06-12T21:04:30+07:00
+https://www.linkedin.com/jobs/search/?keywords=Keppel%20Associate%2C%20Investment&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
+https://www.linkedin.com/jobs/view/astba-corporate-planning	expired	HTTP 404	2026-06-10T17:51:42+07:00
+https://www.paragoncorp.com/careers	error	fetch failed: Get "https://www.paragoncorp.com/careers": tls: failed to verify certificate: x509: “*.hostingplatform.com” certificate is not trusted	2026-06-12T21:04:30+07:00
+https://www.linkedin.com/jobs/search/?keywords=Shopee%20BI%20%26%20Planning%2C%20Strategic%20Driver%20Planning&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
+https://www.linkedin.com/jobs/search/?keywords=Monroe%20Consulting%20Group%20Investment%20Associate	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:20+07:00
+https://www.linkedin.com/jobs/search/?keywords=Smartkarma%20Analyst%2C%20ASEAN%20Private%20Markets&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:15+07:00
+https://id.linkedin.com/jobs/view/4294597111	uncertain	content present but no apply control found	2026-06-12T21:04:29+07:00
+https://id.linkedin.com/jobs/search/?keywords=cermati+credit+risk+analyst+Jakarta	uncertain	content present but no apply control found	2026-06-12T21:04:32+07:00
+https://www.linkedin.com/jobs/search/?keywords=Sea%20Analyst/Senior%20Analyst%2C%20Regional%20Business%20Finance&location=Singapore	active	apply control visible	2026-06-12T07:20:12+07:00
 https://www.linkedin.com/jobs/view/research-associate-research-at-clsa-4280107747	active	apply control visible	2026-06-12T07:20:10+07:00
+https://www.linkedin.com/jobs/view/astra-aal-corp-finance-2026	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:14+07:00
+https://www.linkedin.com/jobs/search/?keywords=BDO%20in%20Indonesia%20Associate%20Auditor%2C%20Fresh%20Graduate&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:48+07:00
+https://www.linkedin.com/jobs/search/?keywords=Tempo%20Scan%20Pacific%20Management%20Trainee%2C%20Distribution%20Division&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:47+07:00
+https://id.linkedin.com/jobs/search/?keywords=Palladium+trade+investment+economist+Jakarta	uncertain	content present but no apply control found	2026-06-12T21:04:28+07:00
+https://www.oliverwyman.com/careers.html	active	apply control visible	2026-06-12T09:14:21+07:00
+https://www.linkedin.com/jobs/search/?keywords=BlackRock%20Investment%20Analyst%2C%20Decarbonization%20Partners&location=Singapore	active	apply control visible	2026-06-12T07:20:14+07:00
 https://careers.societegenerale.com/en/job-offers/graduate-analyst-global-banking-and-advisory-singapore-26000D1X-en?src=JB-14381	active	apply control visible	2026-06-12T07:20:19+07:00
+https://kearney.recsolu.com	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:24+07:00
+https://www.linkedin.com/jobs/search/?keywords=Michael%20Page%20Equity%20Research%20Analyst%2C%20Buy-Side%20Firm&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:15+07:00
+https://www.linkedin.com/jobs/search/?keywords=Time%20Financial%20Planning%20%26%20Business%20Intelligence%20Analyst&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:48+07:00
+https://www.linkedin.com/jobs/view/kpmg-esg-2026	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:20+07:00
+https://www.linkedin.com/jobs/search/?keywords=StepStone%20Group%20Private%20Equity%20Analyst&location=Singapore	active	apply control visible	2026-06-12T07:20:15+07:00
+https://www.linkedin.com/jobs/search/?keywords=Deliveree%20Fresh%20Graduate%20Management%20Trainee%2C%20Accounting%20Associate&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:48+07:00
+https://skha.co.id/join-the-team/associate-consultant/	active	apply control visible	2026-06-12T07:20:18+07:00
+https://id.linkedin.com/jobs/view/treasury-analyst-at-oy!-indonesia-4184436176	expired	HTTP 404	2026-06-12T21:04:30+07:00
+https://id.linkedin.com/jobs/view/associate-business-intelligence-analyst-at-ntt-data-inc-4409285396	active	apply control visible	2026-06-12T21:04:30+07:00
+https://www.ycp.com/careers	active	apply control visible	2026-06-12T21:04:30+07:00
+https://www.linkedin.com/jobs/search/?keywords=Deloitte%20Associate%2C%20Business%20Intelligence&location=Jakarta	active	apply control visible	2026-06-12T07:20:13+07:00
+https://www.linkedin.com/jobs/view/dbs-map-indonesia-2026	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:13+07:00
+https://www.linkedin.com/jobs/search/?keywords=Grab%20Associate%2C%20Strategy%20%26%20Operations%2C%20Transport&location=Singapore	uncertain	content present but no apply control found	2026-06-12T07:20:09+07:00
+https://www.linkedin.com/jobs/search/?keywords=Jefferies%20Investment%20Banking%20Analyst&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:14+07:00
+https://www.linkedin.com/posts/aabaskoro_vacancy-pt-arkora-hydro-tbk-is-looking-share-7465672561377579008-hf7Y/	uncertain	content present but no apply control found	2026-06-12T07:20:17+07:00
+https://www.linkedin.com/jobs/search/?keywords=Plug%20and%20Play%20Ventures%20Analyst/Associate&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:15+07:00
+https://www.linkedin.com/jobs/search/?keywords=HarbourVest%20Partners%20Associate%2C%20Direct&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:15+07:00
+https://www.linkedin.com/jobs/search/?keywords=Keppel%20Associate%2C%20Portfolio%20Management&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
+https://www.linkedin.com/jobs/search/?keywords=Prudential%20Indonesia%20Business%20Performance%20%26%20Reporting%20Analyst&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:17+07:00
+https://id.linkedin.com/jobs/view/4404573114	uncertain	content present but no apply control found	2026-06-12T21:04:28+07:00
+https://career.astra.co.id/lowongan/lowongan-detail-page/12014/Corporate%20Planning%20Analyst	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:11+07:00
+https://www.linkedin.com/jobs/search/?keywords=Sun%20Venture%20Analyst/Associate%2C%20PE%20Direct%20Investment&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:14+07:00
+https://www.linkedin.com/jobs/search/?keywords=ESR%20Group%20Analyst%2C%20Group%20Investments&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
+https://www.trustingsocial.com/careers	uncertain	content present but no apply control found	2026-06-12T21:04:28+07:00
+https://www.linkedin.com/jobs/search/?keywords=99%20Group%20Graduate%20Trainee%20Programme%2C%20Digital%20Marketing&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:49+07:00
+https://www.linkedin.com/jobs/search/?keywords=Aspire%20Strategic%20Finance%20Analyst&location=Singapore	uncertain	content present but no apply control found	2026-06-12T07:20:11+07:00
+https://www.linkedin.com/jobs/view/4415610896	active	apply control visible	2026-06-12T07:20:09+07:00
+https://www.linkedin.com/jobs/search/?keywords=Atome%20Credit%20Analyst&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:48+07:00
+https://careers.ey.com/ey/job/Jakarta-EY-Parthenon-Financial-Diligence-%28Junior-and-Senior-Consultant%29-12190/818827201/	active	apply control visible	2026-06-12T07:20:12+07:00
+https://www.linkedin.com/jobs/search/?keywords=Goldman%20Sachs%20Credit%20Research%2C%20Analyst/Associate&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:19+07:00
+https://www.linkedin.com/jobs/search/?keywords=Monee%20Business%20Intelligence&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:17+07:00
+https://www.linkedin.com/jobs/search/?keywords=Garena%20Revenue%20Associate&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:52+07:00
+https://id.linkedin.com/jobs/view/associate-business-analyst-at-ntt-data-inc-4421147652	active	apply control visible	2026-06-12T21:04:31+07:00
+https://www.linkedin.com/jobs/search/?keywords=Deloitte%20SR%26T%20Amplify%20Program%20Strategy%2C%20Risk%20%26%20Transactions&location=Indonesia	active	apply control visible	2026-06-12T07:20:14+07:00
+https://www.linkedin.com/jobs/search/?keywords=Kerry%20Consulting%20Regional%20Financial%20Analyst&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:15+07:00
+https://www.linkedin.com/jobs/view/4412763012	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:19+07:00
+https://www.linkedin.com/jobs/search/?keywords=Bank%20Jago%20Credit%20Risk%20%26%20Collection%20Strategy%20Specialist&location=Jakarta	uncertain	content present but no apply control found	2026-06-10T17:51:48+07:00
+https://www.linkedin.com/jobs/search/?keywords=Temasek%20Associate%2C%20Investment&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:13+07:00
+https://careers.ey.com/ey/job/Jakarta-Business-Consulting-Finance-%28FSO%29-Junior-Consultant-12190/1030827101/	active	apply control visible	2026-06-12T07:20:12+07:00
+https://www.linkedin.com/jobs/search/?keywords=Societe%20Generale%20Graduate%20Analyst%2C%20Global%20Markets&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:18+07:00
+https://www.linkedin.com/jobs/search/?keywords=Permodalan%20Nasional%20Madani%20%28PNM%29%20Pelaksana%20Sinergi%20Ekosistem	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:19+07:00
+https://www.linkedin.com/jobs/search/?keywords=Blueleaf%20Energy%20Investment%20Analyst&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
+https://www.linkedin.com/jobs/search/?keywords=MSIG%20Life%20Agency%20Leadership%20Trainee%20Program&location=Jakarta	uncertain	content present but no apply control found	2026-06-10T17:51:53+07:00
+https://www.linkedin.com/jobs/view/4420496015	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:17+07:00
+https://www.linkedin.com/jobs/search/?keywords=HashMicro%20Business%20Development%20Executive&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:48+07:00
+https://www.linkedin.com/jobs/search/?keywords=Shopee%20Campaign%20Project%20-%20Marketing&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:54+07:00
+https://www.linkedin.com/jobs/view/shopee-associate-strategy	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:20+07:00
+https://www.linkedin.com/jobs/search/?keywords=Digital%20Realty%20Associate%2C%20Acquisitions&location=Singapore	uncertain	content present but no apply control found	2026-06-12T07:20:15+07:00
+https://www.linkedin.com/posts/aabaskoro_vacancy-pt-arkora-hydro-tbk-is-looking-share-7465672561377579008-hf7Y/?utm_source=share&utm_medium=member_desktop&rcm=ACoAAC2Q0aEBUO9fkmiHG7GlPSYayFRdaVe6d58	uncertain	content present but no apply control found	2026-06-10T18:20:19+07:00
+https://www.linkedin.com/jobs/search/?keywords=HSBC%20AVP%20Risk%20Analyst%20Unit%2C%20Global%20Network%20Banking&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
+https://www.linkedin.com/jobs/search/?keywords=Far%20East%20Orchard%20Investment%20Analyst&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
+https://www.linkedin.com/jobs/search/?keywords=GE%20HealthCare%20Graduate%20Services%20Trainee&location=Jakarta	uncertain	content present but no apply control found	2026-06-10T17:51:42+07:00
+https://www.linkedin.com/jobs/search/?keywords=Great%20Giant%20Foods%20Leadership%20Acceleration%20Program&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:50+07:00
+https://www.linkedin.com/jobs/search/?keywords=Astra%20Strategic%20Group%20Business%20Analyst%20-%20AI	uncertain	content present but no apply control found	2026-06-12T07:20:10+07:00
 https://www.linkedin.com/jobs/view/4424406940	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:17+07:00
 https://www.linkedin.com/jobs/search/?currentJobId=4413515994&keywords=HSBC%20AVP%20Risk%20Analyst%20Unit%2C%20Global%20Network%20Banking&location=Jakarta	uncertain	content present but no apply control found	2026-06-10T18:07:19+07:00
-https://www.linkedin.com/jobs/search/?keywords=Smartkarma%20Analyst%2C%20ASEAN%20Private%20Markets&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:15+07:00
-https://www.linkedin.com/jobs/view/4412763012	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:19+07:00
-https://www.linkedin.com/jobs/search/?keywords=McKinsey%20%26%20Company%20Junior%20Associate%2C%20Tech%20%26%20AI&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:13+07:00
-https://www.linkedin.com/jobs/search/?keywords=Astra%20Strategic%20Group%20Business%20Analyst%20-%20AI	uncertain	content present but no apply control found	2026-06-12T07:20:10+07:00
-https://www.linkedin.com/jobs/search/?keywords=Aspire%20Strategic%20Finance%20Analyst&location=Singapore	uncertain	content present but no apply control found	2026-06-12T07:20:11+07:00
+https://id.indeed.com/viewjob?jk=moladin+risk+strategy+analyst	expired	insufficient content — likely nav/footer only	2026-06-12T21:04:30+07:00
 https://www.linkedin.com/jobs/search/?keywords=Natixis%20Trainee%2C%20Investment%20Banking%20Corporate%20Finance&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:14+07:00
-https://www.linkedin.com/jobs/search/?keywords=Bank%20Danamon%20Danamon%20Banking%20Officer&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:48+07:00
-https://www.linkedin.com/jobs/search/?keywords=BlackRock%20Investment%20Analyst%2C%20Decarbonization%20Partners&location=Singapore	active	apply control visible	2026-06-12T07:20:14+07:00
-https://www.linkedin.com/jobs/search/?keywords=BDO%20in%20Indonesia%20Associate%20Auditor%2C%20Fresh%20Graduate&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:48+07:00
-https://www.linkedin.com/jobs/search/?keywords=Keppel%20Associate%2C%20Investment&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
-https://www.linkedin.com/jobs/search/?keywords=Deliveree%20Fresh%20Graduate%20Management%20Trainee%2C%20Accounting%20Associate&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:48+07:00
-https://www.linkedin.com/jobs/search/?keywords=HashMicro%20Business%20Development%20Executive&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:48+07:00
-https://www.linkedin.com/jobs/search/?keywords=ESR%20Group%20Analyst%2C%20Group%20Investments&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
-https://www.linkedin.com/jobs/search/?keywords=Sun%20Venture%20Analyst/Associate%2C%20PE%20Direct%20Investment&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:14+07:00
-https://www.linkedin.com/jobs/search/?keywords=Blueleaf%20Energy%20Investment%20Analyst&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
-https://www.linkedin.com/jobs/view/4415610896	active	apply control visible	2026-06-12T07:20:09+07:00
-https://www.linkedin.com/jobs/view/4417087077	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:19+07:00
-https://www.linkedin.com/jobs/view/shopee-digital-product-bi-shopeepay	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:17+07:00
-https://www.linkedin.com/jobs/search/?keywords=Monroe%20Consulting%20Group%20Investment%20Associate	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:20+07:00
-https://www.linkedin.com/jobs/search/?keywords=GE%20HealthCare%20Graduate%20Services%20Trainee&location=Jakarta	uncertain	content present but no apply control found	2026-06-10T17:51:42+07:00
-https://www.linkedin.com/jobs/search/?keywords=Shopee%20Campaign%20Project%20-%20Marketing&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:54+07:00
-https://www.linkedin.com/jobs/search/?keywords=Garena%20Revenue%20Associate&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:52+07:00
-https://www.linkedin.com/jobs/search/?keywords=Shopee%20Data%20Analyst&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
-https://www.linkedin.com/jobs/view/shopee-associate-strategy	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:20+07:00
-https://www.linkedin.com/jobs/search/?keywords=Atome%20Credit%20Analyst&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:48+07:00
-https://www.linkedin.com/jobs/search/?keywords=Digital%20Realty%20Associate%2C%20Acquisitions&location=Singapore	uncertain	content present but no apply control found	2026-06-12T07:20:15+07:00
-https://www.linkedin.com/jobs/search/?keywords=Permodalan%20Nasional%20Madani%20%28PNM%29%20Pelaksana%20Sinergi%20Ekosistem	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:19+07:00
-https://skha.co.id/join-the-team/associate-consultant/	active	apply control visible	2026-06-12T07:20:18+07:00
-https://www.linkedin.com/jobs/view/astba-corporate-planning	expired	HTTP 404	2026-06-10T17:51:42+07:00
-https://www.linkedin.com/jobs/search/?keywords=StepStone%20Group%20Private%20Equity%20Analyst&location=Singapore	active	apply control visible	2026-06-12T07:20:15+07:00
-https://www.linkedin.com/posts/aabaskoro_vacancy-pt-arkora-hydro-tbk-is-looking-share-7465672561377579008-hf7Y/	uncertain	content present but no apply control found	2026-06-12T07:20:17+07:00
-https://www.linkedin.com/jobs/view/astra-aal-corp-finance-2026	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:14+07:00
-https://www.linkedin.com/jobs/search/?keywords=Shopee%20BI%20%26%20Planning%2C%20Strategic%20Driver%20Planning&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
-https://www.linkedin.com/jobs/search/?keywords=Sea%20Analyst/Senior%20Analyst%2C%20Regional%20Business%20Finance&location=Singapore	active	apply control visible	2026-06-12T07:20:12+07:00
-https://career.astra.co.id/lowongan/lowongan-detail-page/12014/Corporate%20Planning%20Analyst	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:11+07:00
-https://kearney.recsolu.com	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:24+07:00
-https://www.linkedin.com/jobs/search/?keywords=MSIG%20Life%20Agency%20Leadership%20Trainee%20Program&location=Jakarta	uncertain	content present but no apply control found	2026-06-10T17:51:53+07:00
-https://www.linkedin.com/jobs/search/?keywords=Great%20Giant%20Foods%20Leadership%20Acceleration%20Program&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:50+07:00
-https://www.linkedin.com/jobs/search/?keywords=Motion%20Ventures%20Investment%20Associate&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:15+07:00
-https://www.linkedin.com/jobs/search/?keywords=Deloitte%20SR%26T%20Amplify%20Program%20Strategy%2C%20Risk%20%26%20Transactions&location=Indonesia	active	apply control visible	2026-06-12T07:20:14+07:00
-https://www.linkedin.com/jobs/search/?keywords=Garena%20Garena%20Development%20Program&location=Jakarta	uncertain	content present but no apply control found	2026-06-12T07:20:12+07:00
-https://www.linkedin.com/jobs/search/?keywords=Jefferies%20Investment%20Banking%20Analyst&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:14+07:00
-https://www.linkedin.com/jobs/search/?keywords=Plug%20and%20Play%20Ventures%20Analyst/Associate&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:15+07:00
-https://www.linkedin.com/jobs/search/?keywords=Temasek%20Associate%2C%20Investment&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:13+07:00
-https://www.linkedin.com/jobs/view/4420496015	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:17+07:00
-https://www.oliverwyman.com/careers.html	active	apply control visible	2026-06-12T09:14:21+07:00
-https://www.linkedin.com/jobs/search/?keywords=HarbourVest%20Partners%20Associate%2C%20Direct&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:15+07:00
-https://www.linkedin.com/jobs/search/?keywords=Temasek%20Associate/Senior%20Associate%2C%20Strategic%20Initiatives&location=Singapore	uncertain	content present but no apply control found	2026-06-12T07:20:09+07:00
-https://www.linkedin.com/jobs/search/?keywords=Societe%20Generale%20Graduate%20Analyst%2C%20Global%20Markets&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:18+07:00
-https://www.linkedin.com/jobs/search/?keywords=Keppel%20Associate%2C%20Portfolio%20Management&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
-https://www.linkedin.com/posts/bdo-indonesia-associate-consultant	expired	HTTP 404	2026-06-12T07:20:18+07:00
-https://www.linkedin.com/jobs/search/?keywords=Tempo%20Scan%20Pacific%20Management%20Trainee%2C%20Distribution%20Division&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:47+07:00
-https://www.linkedin.com/jobs/search/?keywords=HSBC%20AVP%20Risk%20Analyst%20Unit%2C%20Global%20Network%20Banking&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
-https://www.linkedin.com/jobs/search/?keywords=UOB%20Financial%20Analyst&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:18+07:00
-https://www.linkedin.com/jobs/search/?keywords=Time%20Financial%20Planning%20%26%20Business%20Intelligence%20Analyst&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:48+07:00
-https://www.linkedin.com/jobs/search/?keywords=Goldman%20Sachs%20Credit%20Research%2C%20Analyst/Associate&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:19+07:00
-https://www.linkedin.com/jobs/search/?keywords=Far%20East%20Orchard%20Investment%20Analyst&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
-https://www.linkedin.com/jobs/search/?keywords=Kerry%20Consulting%20Regional%20Financial%20Analyst&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:15+07:00
-https://www.linkedin.com/jobs/search/?keywords=99%20Group%20Graduate%20Trainee%20Programme%2C%20Digital%20Marketing&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:49+07:00
-https://www.linkedin.com/posts/aabaskoro_vacancy-pt-arkora-hydro-tbk-is-looking-share-7465672561377579008-hf7Y/?utm_source=share&utm_medium=member_desktop&rcm=ACoAAC2Q0aEBUO9fkmiHG7GlPSYayFRdaVe6d58	uncertain	content present but no apply control found	2026-06-10T18:20:19+07:00
-https://www.linkedin.com/jobs/search/?keywords=Shopee%20Data%20Analyst%2C%20Business%20Intelligence&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
 https://www.linkedin.com/jobs/search/?keywords=Goldman%20Sachs%20IB%20Southeast%20Asia%20Advisory%2C%20Analyst/Associate&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:17+07:00
-https://careers.ey.com/ey/job/Jakarta-Business-Consulting-Finance-%28FSO%29-Junior-Consultant-12190/1030827101/	active	apply control visible	2026-06-12T07:20:12+07:00
-https://www.linkedin.com/jobs/search/?keywords=Grab%20Associate%2C%20Strategy%20%26%20Operations%2C%20Transport&location=Singapore	uncertain	content present but no apply control found	2026-06-12T07:20:09+07:00
-https://www.linkedin.com/jobs/search/?keywords=Monee%20Business%20Intelligence&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:17+07:00
+https://id.jobstreet.com/id/management+trainee+finance+accounting-jobs/in-Jakarta-Raya	uncertain	content present but no apply control found	2026-06-12T21:04:31+07:00
 https://www.linkedin.com/jobs/search/?keywords=Alvarez%20%26%20Marsal%20Analyst%2C%20Restructuring&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
-https://www.linkedin.com/jobs/search/?keywords=Bank%20Jago%20Credit%20Risk%20%26%20Collection%20Strategy%20Specialist&location=Jakarta	uncertain	content present but no apply control found	2026-06-10T17:51:48+07:00
-https://careers.ey.com/ey/job/Jakarta-EY-Parthenon-Financial-Diligence-%28Junior-and-Senior-Consultant%29-12190/818827201/	active	apply control visible	2026-06-12T07:20:12+07:00
-https://www.linkedin.com/jobs/view/kpmg-esg-2026	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:20+07:00
-https://www.linkedin.com/jobs/search/?keywords=Michael%20Page%20Equity%20Research%20Analyst%2C%20Buy-Side%20Firm&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:15+07:00
-https://www.linkedin.com/jobs/search/?keywords=Prudential%20Indonesia%20Business%20Performance%20%26%20Reporting%20Analyst&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:17+07:00
-https://www.linkedin.com/jobs/view/dbs-map-indonesia-2026	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:13+07:00
+https://www.monroegroup.com/careers	active	apply control visible	2026-06-12T21:04:33+07:00
+https://www.linkedin.com/jobs/search/?keywords=McKinsey%20%26%20Company%20Junior%20Associate%2C%20Tech%20%26%20AI&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:13+07:00
+https://www.linkedin.com/jobs/search/?keywords=Shopee%20Data%20Analyst%2C%20Business%20Intelligence&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
+https://www.linkedin.com/jobs/view/4417087077	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:19+07:00
+https://www.linkedin.com/jobs/search/?keywords=Shopee%20Data%20Analyst&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:16+07:00
+https://www.linkedin.com/jobs/view/shopee-digital-product-bi-shopeepay	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:17+07:00
+https://www.linkedin.com/posts/bdo-indonesia-associate-consultant	expired	HTTP 404	2026-06-12T07:20:18+07:00
+https://www.linkedin.com/jobs/search/?keywords=Bank%20Danamon%20Danamon%20Banking%20Officer&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-10T17:51:48+07:00
+https://id.linkedin.com/jobs/search/?keywords=Fore+Coffee+strategy+associate+Jakarta	uncertain	content present but no apply control found	2026-06-12T21:04:32+07:00
+https://www.linkedin.com/jobs/search/?keywords=Garena%20Garena%20Development%20Program&location=Jakarta	uncertain	content present but no apply control found	2026-06-12T07:20:12+07:00
+https://www.linkedin.com/jobs/search/?keywords=Temasek%20Associate/Senior%20Associate%2C%20Strategic%20Initiatives&location=Singapore	uncertain	content present but no apply control found	2026-06-12T07:20:09+07:00
+https://www.linkedin.com/jobs/search/?keywords=Motion%20Ventures%20Investment%20Associate&location=Singapore	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:15+07:00
+https://www.linkedin.com/jobs/search/?keywords=UOB%20Financial%20Analyst&location=Jakarta	expired	insufficient content — likely nav/footer only	2026-06-12T07:20:18+07:00
