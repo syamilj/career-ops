@@ -17,7 +17,15 @@ Export a tailored, ATS-optimized CV as a `.tex` file and compile it to PDF via `
 11. Generate the `.tex` file using `templates/cv-template.tex`
 12. Write to `output/cv-{candidate}-{company}-{YYYY-MM-DD}.tex`
 13. Run: `node generate-latex.mjs output/cv-{candidate}-{company}-{YYYY-MM-DD}.tex output/cv-{candidate}-{company}-{YYYY-MM-DD}.pdf`
-14. Report: .tex path, .pdf path, file sizes, section count, keyword coverage %
+14. **Check page count (MANDATORY):** the JSON report includes `pdf.pageCount`. If > 1, condense content (fewer bullets per older role, trim least-relevant items) and recompile until exactly 1 page. NEVER shrink fonts or margins to force a fit.
+15. Report: .tex path, .pdf path, file sizes, page count, section count, keyword coverage %
+
+## One-Page Rule (CRITICAL)
+
+The compiled PDF MUST be exactly 1 page, matching the design in `templates/cv-example.jpg`:
+- Max 3 bullets for the most recent/relevant roles, 2 for older ones
+- Merge short related bullets; cut items with the least JD relevance
+- Fit by trimming content, not by shrinking text or margins
 
 **Requires:** `tectonic` (preferred — `brew install tectonic`, auto-downloads packages) or `pdflatex` (MiKTeX / TeX Live) on PATH.
 
@@ -28,17 +36,23 @@ The template at `templates/cv-template.tex` uses `{{PLACEHOLDER}}` syntax:
 | Placeholder | Source |
 |-------------|--------|
 | `{{NAME}}` | `profile.yml → candidate.full_name` |
-| `{{CONTACT_LINE}}` | Phone / City, State / Visa status — built from profile.yml |
+| `{{LOCATION}}` | City, Country from profile.yml (e.g. `Jakarta, Indonesia`) |
 | `{{EMAIL_URL}}` | Raw email for `mailto:` URL — must not be LaTeX-escaped (from profile.yml) |
 | `{{EMAIL_DISPLAY}}` | Escaped email for display text — LaTeX-special chars like `_` must be escaped, e.g. `first\_name@example.com` |
+| `{{PHONE_URL}}` | Phone for `tel:` URL — digits and leading `+` only, NO spaces/dashes (e.g. `+6285161112223`) |
+| `{{PHONE_DISPLAY}}` | Phone display text (may contain spaces) |
 | `{{LINKEDIN_URL}}` | Full URL with scheme for `\href{}`: e.g. `https://linkedin.com/in/username`. If `profile.yml` stores a bare host+path (no scheme), prepend `https://` before substitution. |
 | `{{LINKEDIN_DISPLAY}}` | Display text only (no scheme): `linkedin.com/in/username` |
 | `{{GITHUB_URL}}` | Full URL with scheme for `\href{}`: e.g. `https://github.com/username`. If `profile.yml` stores a bare host+path, prepend `https://`. |
 | `{{GITHUB_DISPLAY}}` | Display text only (no scheme): `github.com/username` |
+| `{{SUMMARY}}` | Personalized Professional Summary with JD keywords (escaped, italic in template) |
 | `{{EDUCATION}}` | LaTeX `\resumeSubheading` blocks from cv.md Education section |
 | `{{EXPERIENCE}}` | LaTeX `\resumeSubheading` + `\resumeItem` blocks — reordered bullets |
-| `{{PROJECTS}}` | LaTeX `\resumeProjectHeading` + `\resumeItem` blocks — top 3-4 selected |
-| `{{SKILLS}}` | LaTeX `\textbf{Category}{: items}` lines from cv.md Technical Skills |
+| `{{AWARDS}}` | `\item` lines from cv.md Honors & Awards (inside Additional Information) |
+| `{{CERTIFICATIONS}}` | `\item` lines: languages + certifications (inside Additional Information) |
+| `{{SKILLS}}` | `\item` lines from cv.md Technical Skills (inside Additional Information) |
+
+**Section order in template (matches `cv-example.jpg`):** Header → Professional Summary → Education → Professional Experience → Additional Information (Awards, Languages & Certifications, Technical Skills).
 
 ## LaTeX Content Generation Rules
 
@@ -74,24 +88,18 @@ Each role becomes:
       \resumeItemListEnd
 ```
 
-### Projects
+### Additional Information (Awards / Certifications / Skills)
 
-Each project becomes:
+Each line becomes a plain `\item`:
 
 ```latex
-\resumeProjectHeading{Project Name \emph{$|$ Affiliation/Context}}{Date}
-\resumeItemListStart
-    \resumeItem{Bullet text}
-    ...
-\resumeItemListEnd
+    \item 1st Place — National Business Plan Competition: BUMDes Incubation Model (270+ teams, Nov 2021).
 ```
 
-### Skills
+For skills, group inline on one or two `\item` lines to save vertical space:
 
 ```latex
-    \textbf{Languages}{: C, C++, Java, ...} \\
-    \textbf{Frameworks \& ML}{: PyTorch, LangChain, ...} \\
-    \textbf{Tools \& Cloud}{: Docker, Kubernetes, ...}
+    \item \textbf{Excel:} Advanced (Pivot Tables, XLOOKUP, INDEX/MATCH, macros). \textbf{Statistical:} EViews, STATA, SPSS. \textbf{Programming:} Python (Pandas, NumPy), SQL.
 ```
 
 ## LaTeX Escaping (CRITICAL)
@@ -123,7 +131,7 @@ All text content MUST be escaped for LaTeX before insertion:
 ## ATS Rules (same as pdf mode)
 
 - Single-column layout (enforced by template)
-- Standard section headers: Education, Work Experience, Personal Projects, Technical Skills
+- Standard section headers: Professional Summary, Education, Professional Experience, Additional Information
 - UTF-8, machine-readable via `\pdfgentounicode=1`
 - Keywords distributed: first bullet of each role, skills section
 - No images, no graphics, no color in body text

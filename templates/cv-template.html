@@ -1,4 +1,15 @@
 <!DOCTYPE html>
+<!-- ============================================================
+     RULES — any CV generated from this template MUST follow:
+     1. ONE PAGE ONLY. After generating the PDF, check the page
+        count. If > 1 page: condense bullets, trim least-relevant
+        items, reduce older roles to 2 bullets. Do NOT shrink
+        fonts or margins below the values in this stylesheet.
+     2. CLICKABLE CONTACT INFO. Email uses mailto:, phone uses
+        tel: (no spaces in the tel: URL), LinkedIn/portfolio use
+        full https:// URLs.
+     3. Replace only the {{PLACEHOLDER}} tokens — keep CSS intact.
+     ============================================================ -->
 <html lang="{{LANG}}">
 <head>
 <meta charset="UTF-8">
@@ -360,9 +371,9 @@
     <h1>{{NAME}}</h1>
     <div class="header-gradient"></div>
     <div class="contact-row">
-      <span>{{PHONE}}</span>
+      <a href="tel:{{PHONE_URL}}">{{PHONE}}</a>
       <span class="separator">|</span>
-      <span>{{EMAIL}}</span>
+      <a href="mailto:{{EMAIL}}">{{EMAIL}}</a>
       <span class="separator">|</span>
       <a href="{{LINKEDIN_URL}}">{{LINKEDIN_DISPLAY}}</a>
       <span class="separator">|</span>

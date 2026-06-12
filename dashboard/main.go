@@ -29,7 +29,7 @@ const (
 type shellDoneMsg struct{ err error }
 
 type appModel struct {
-	pipeline        screens.PipelineModel
+	layout          screens.LayoutModel
 	viewer          screens.ViewerModel
 	progress        screens.ProgressModel
 	state           viewState
@@ -63,23 +63,24 @@ func (m appModel) checkLivenessCmd(url string, hybrid bool) tea.Cmd {
 func (m appModel) persistLivenessCache() {
 	m.cacheMu.Lock()
 	defer m.cacheMu.Unlock()
-	_ = data.SaveLivenessCache(m.careerOpsPath, m.pipeline.LivenessSnapshot())
+	_ = data.SaveLivenessCache(m.careerOpsPath, m.layout.Pipeline().LivenessSnapshot())
 }
 
 func (m *appModel) reloadPipelineData() {
 	apps := data.ParseApplications(m.careerOpsPath)
 	metrics := data.ComputeMetrics(apps)
 	m.progressMetrics = data.ComputeProgressMetrics(apps)
-	m.pipeline = m.pipeline.WithReloadedData(apps, metrics)
+	reloaded := m.layout.Pipeline().WithReloadedData(apps, metrics)
+	m.layout.PipelineCopy(reloaded)
 }
 
 func (m appModel) Init() tea.Cmd {
 	// Kick off background liveness checks for stale URLs (HTTP-only, 3 workers).
-	urls := m.pipeline.StaleURLs()
+	urls := m.layout.Pipeline().StaleURLs()
 	if len(urls) == 0 {
 		return nil
 	}
-	m.pipeline.MarkChecking(urls)
+	m.layout.Pipeline().MarkChecking(urls)
 	cmds := make([]tea.Cmd, 0, len(urls))
 	for _, u := range urls {
 		cmds = append(cmds, m.checkLivenessCmd(u, false))
@@ -90,15 +91,15 @@ func (m appModel) Init() tea.Cmd {
 func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.pipeline.Resize(msg.Width, msg.Height)
+		m.layout.Resize(msg.Width, msg.Height)
 		if m.state == viewReport {
 			m.viewer.Resize(msg.Width, msg.Height)
 		}
 		if m.state == viewProgress {
 			m.progress.Resize(msg.Width, msg.Height)
 		}
-		pm, cmd := m.pipeline.Update(msg)
-		m.pipeline = pm
+		lm, cmd := m.layout.Update(msg)
+		m.layout = lm
 		return m, cmd
 
 	case screens.PipelineClosedMsg:
@@ -106,7 +107,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screens.PipelineLoadReportMsg:
 		archetype, tldr, remote, comp, domain, seniority := data.LoadReportSummary(msg.CareerOpsPath, msg.ReportPath)
-		m.pipeline.EnrichReport(msg.ReportPath, archetype, tldr, remote, comp, domain, seniority)
+		m.layout.Pipeline().EnrichReport(msg.ReportPath, archetype, tldr, remote, comp, domain, seniority)
 		return m, nil
 
 	case screens.PipelineUpdateStatusMsg:
@@ -130,37 +131,37 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case screens.LivenessResultMsg:
-		m.pipeline.SetLiveness(msg.URL, msg.Result)
+		m.layout.Pipeline().SetLiveness(msg.URL, msg.Result)
 		m.persistLivenessCache()
 		return m, nil
 
 	case screens.PipelineUpdateURLMsg:
 		if err := data.UpdateJobURL(msg.CareerOpsPath, msg.App, msg.NewURL); err != nil {
-			m.pipeline.SetStatusMsg("URL update failed: " + err.Error())
+			m.layout.SetStatusMsg("URL update failed: " + err.Error())
 			return m, nil
 		}
 		m.reloadPipelineData()
-		m.pipeline.SetStatusMsg("URL saved to " + msg.App.ReportPath)
+		m.layout.SetStatusMsg("URL saved to " + msg.App.ReportPath)
 		// Old URL's liveness no longer applies; check the new one.
 		return m, m.checkLivenessCmd(msg.NewURL, false)
 
 	case screens.PipelineUpdateNotesMsg:
 		if err := data.UpdateApplicationNotes(msg.CareerOpsPath, msg.App, msg.NewNotes); err != nil {
-			m.pipeline.SetStatusMsg("notes update failed: " + err.Error())
+			m.layout.SetStatusMsg("notes update failed: " + err.Error())
 			return m, nil
 		}
 		m.reloadPipelineData()
-		m.pipeline.SetStatusMsg("notes updated")
+		m.layout.SetStatusMsg("notes updated")
 		return m, nil
 
 	case screens.PipelineAddEntryMsg:
 		num, err := data.AddApplication(msg.CareerOpsPath, msg.URL, msg.Company, "")
 		if err != nil {
-			m.pipeline.SetStatusMsg("add failed: " + err.Error())
+			m.layout.SetStatusMsg("add failed: " + err.Error())
 			return m, nil
 		}
 		m.reloadPipelineData()
-		m.pipeline.SetStatusMsg(fmt.Sprintf("entry #%d added — checking liveness…", num))
+		m.layout.SetStatusMsg(fmt.Sprintf("entry #%d added — checking liveness…", num))
 		return m, m.checkLivenessCmd(msg.URL, false)
 
 	case screens.PipelineExecShellMsg:
@@ -172,9 +173,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case shellDoneMsg:
 		if msg.err != nil {
-			m.pipeline.SetStatusMsg("shell exited with error: " + msg.err.Error())
+			m.layout.SetStatusMsg("shell exited with error: " + msg.err.Error())
 		} else {
-			m.pipeline.SetStatusMsg("shell command finished — data reloaded")
+			m.layout.SetStatusMsg("shell command finished — data reloaded")
 		}
 		m.reloadPipelineData()
 		return m, nil
@@ -183,7 +184,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewer = screens.NewViewerModel(
 			m.theme,
 			msg.Path, msg.Title,
-			m.pipeline.Width(), m.pipeline.Height(),
+			m.layout.Pipeline().Width(), m.layout.Pipeline().Height(),
 		)
 		m.state = viewReport
 		return m, nil
@@ -196,7 +197,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.progress = screens.NewProgressModel(
 			theme.NewTheme("catppuccin-mocha"),
 			m.progressMetrics,
-			m.pipeline.Width(), m.pipeline.Height(),
+			m.layout.Pipeline().Width(), m.layout.Pipeline().Height(),
 		)
 		m.state = viewProgress
 		return m, nil
@@ -234,8 +235,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.progress = pg
 			return m, cmd
 		}
-		pm, cmd := m.pipeline.Update(msg)
-		m.pipeline = pm
+		lm, cmd := m.layout.Update(msg)
+		m.layout = lm
 		return m, cmd
 	}
 }
@@ -247,7 +248,7 @@ func (m appModel) View() string {
 	case viewProgress:
 		return m.progress.View()
 	default:
-		return m.pipeline.View()
+		return m.layout.View()
 	}
 }
 
@@ -268,25 +269,28 @@ func main() {
 	metrics := data.ComputeMetrics(apps)
 	progressMetrics := data.ComputeProgressMetrics(apps)
 
-	// Batch-load all report summaries
+	// Create theme
 	t := theme.NewTheme("auto")
-	pm := screens.NewPipelineModel(t, apps, metrics, careerOpsPath, 120, 40)
 
+	// Create layout (sidebar + pipeline)
+	layout := screens.NewLayoutModel(t, apps, metrics, careerOpsPath, 120, 40)
+
+	// Batch-load all report summaries
 	for _, app := range apps {
 		if app.ReportPath == "" {
 			continue
 		}
 		archetype, tldr, remote, comp, domain, seniority := data.LoadReportSummary(careerOpsPath, app.ReportPath)
 		if archetype != "" || tldr != "" || remote != "" || comp != "" || domain != "" || seniority != "" {
-			pm.EnrichReport(app.ReportPath, archetype, tldr, remote, comp, domain, seniority)
+			layout.Pipeline().EnrichReport(app.ReportPath, archetype, tldr, remote, comp, domain, seniority)
 		}
 	}
 
 	// Seed liveness state from the on-disk cache (24h TTL).
-	pm.SeedLivenessCache(data.LoadLivenessCache(careerOpsPath))
+	layout.Pipeline().SeedLivenessCache(data.LoadLivenessCache(careerOpsPath))
 
 	m := appModel{
-		pipeline:        pm,
+		layout:          layout,
 		careerOpsPath:   careerOpsPath,
 		theme:           t,
 		progressMetrics: progressMetrics,
@@ -294,7 +298,7 @@ func main() {
 		cacheMu:         &sync.Mutex{},
 	}
 
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseAllMotion())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

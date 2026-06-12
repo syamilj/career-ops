@@ -166,6 +166,26 @@ type PipelineModel struct {
 	statusMsg  string // one-line feedback shown in the help area; cleared on next keypress
 	liveness   map[string]data.LivenessResult
 	checkingNo map[string]bool // URLs currently being checked
+	// Help overlay sub-state
+	showHelp bool
+	// Compare mode sub-state
+	compareMode  bool
+	compareSelected map[int]bool // indices of selected items for comparison
+	// Expandable rows sub-state
+	expandedRows map[int]bool // indices of expanded rows
+	// Inline editing sub-state
+	editingRow   int    // index of row being edited (-1 if none)
+	editingField string // "notes", "status", etc.
+	editingText  string // current editing text
+	// Multi-select sub-state
+	multiSelectMode bool
+	selectedRows    map[int]bool // indices of selected rows
+	// Drag and drop sub-state
+	dragMode    bool
+	dragIndex   int // index of row being dragged
+	dropIndex   int // index of drop target
+	// Compact mode - skip header/tabs/metrics when in sidebar layout
+	compact bool
 }
 
 // NewPipelineModel creates a new pipeline screen.
@@ -183,6 +203,9 @@ func NewPipelineModel(t theme.Theme, apps []model.CareerApplication, metrics mod
 		reportCache:   make(map[string]reportSummary),
 		liveness:      make(map[string]data.LivenessResult),
 		checkingNo:    make(map[string]bool),
+		expandedRows:  make(map[int]bool),
+		editingRow:    -1,
+		selectedRows:  make(map[int]bool),
 	}
 	m.applyFilterAndSort()
 	return m
@@ -204,6 +227,11 @@ func (m PipelineModel) Width() int { return m.width }
 
 // Height returns the current height.
 func (m PipelineModel) Height() int { return m.height }
+
+// SetCompact enables compact mode - skips header/tabs/metrics when in sidebar layout.
+func (m *PipelineModel) SetCompact(compact bool) {
+	m.compact = compact
+}
 
 // CopyReportCache copies the report cache from another pipeline model.
 func (m *PipelineModel) CopyReportCache(other *PipelineModel) {
@@ -361,6 +389,27 @@ func (m PipelineModel) Update(msg tea.Msg) (PipelineModel, tea.Cmd) {
 			return m.handleInputBar(msg)
 		}
 		return m.handleKey(msg)
+	case tea.MouseMsg:
+		// Mouse scroll support for pipeline
+		switch msg.Type {
+		case tea.MouseWheelUp:
+			if len(m.filtered) > 0 {
+				m.cursor--
+				if m.cursor < 0 {
+					m.cursor = 0
+				}
+				m.adjustScroll()
+			}
+		case tea.MouseWheelDown:
+			if len(m.filtered) > 0 {
+				m.cursor++
+				if m.cursor >= len(m.filtered) {
+					m.cursor = len(m.filtered) - 1
+				}
+				m.adjustScroll()
+			}
+		}
+		return m, m.loadCurrentReport()
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -371,7 +420,20 @@ func (m PipelineModel) Update(msg tea.Msg) (PipelineModel, tea.Cmd) {
 
 func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 	m.statusMsg = ""
+
+	// Help overlay takes priority
+	if m.showHelp {
+		if msg.String() == "?" || msg.String() == "esc" || msg.String() == "q" {
+			m.showHelp = false
+		}
+		return m, nil
+	}
+
 	switch msg.String() {
+	case "?":
+		m.showHelp = true
+		return m, nil
+
 	case ":":
 		m.inputMode = "command"
 		m.inputText = ""
@@ -418,6 +480,12 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 			m.scrollOffset = 0
 			return m, m.loadCurrentReport()
 		}
+		if m.compareMode {
+			m.compareMode = false
+			m.compareSelected = make(map[int]bool)
+			m.statusMsg = ""
+			return m, nil
+		}
 		return m, nil
 
 	case "q", "ctrl+c":
@@ -426,6 +494,30 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 	case "/":
 		m.searchInput = true
 		return m, nil
+
+	case "x":
+		// Toggle compare mode
+		if m.compareMode {
+			m.compareMode = false
+			m.compareSelected = make(map[int]bool)
+			m.statusMsg = ""
+		} else {
+			m.compareMode = true
+			m.compareSelected = make(map[int]bool)
+			m.statusMsg = "compare mode: press x to select, enter to compare"
+		}
+		return m, nil
+
+	case "space":
+		if m.compareMode && len(m.filtered) > 0 {
+			if m.compareSelected[m.cursor] {
+				delete(m.compareSelected, m.cursor)
+			} else {
+				m.compareSelected[m.cursor] = true
+			}
+			m.statusMsg = fmt.Sprintf("selected: %d items", len(m.compareSelected))
+			return m, nil
+		}
 
 	case "down", "j":
 		if len(m.filtered) > 0 {
@@ -572,6 +664,43 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 			m.applyFilterAndSort()
 			m.cursor = 0
 			m.scrollOffset = 0
+		}
+
+	case "e":
+		// Toggle expand/collapse row
+		if len(m.filtered) > 0 {
+			if m.expandedRows[m.cursor] {
+				delete(m.expandedRows, m.cursor)
+			} else {
+				m.expandedRows[m.cursor] = true
+			}
+		}
+
+	case "i":
+		// Start inline editing for notes
+		if len(m.filtered) > 0 {
+			m.editingRow = m.cursor
+			m.editingField = "notes"
+			m.inputMode = "inline_edit"
+			m.inputText = ""
+		}
+
+	case "m":
+		// Toggle multi-select mode
+		m.multiSelectMode = !m.multiSelectMode
+		if !m.multiSelectMode {
+			m.selectedRows = make(map[int]bool)
+			m.statusMsg = ""
+		} else {
+			m.statusMsg = "multi-select mode: space to select, enter to batch action"
+		}
+
+	case "ctrl+j":
+		// Start drag mode
+		if len(m.filtered) > 0 && !m.dragMode {
+			m.dragMode = true
+			m.dragIndex = m.cursor
+			m.statusMsg = "drag mode: use arrow keys to move, enter to drop, esc to cancel"
 		}
 	}
 
@@ -1042,7 +1171,7 @@ type colW struct {
 func columnDefs() []colW {
 	return []colW{
 		// Always visible
-		{"#", 3, 0}, {"Sc", 4, 0}, {"Company", 16, 0},
+		{"#", 4, 0}, {"Sc", 5, 0}, {"Company", 16, 0},
 		// Core columns
 		{"Live", 4, 50}, {"Status", 9, 55}, {"Date", 8, 68}, {"Gaji", 14, 82}, {"Vrdct", 6, 98},
 		// Medium (wide terminals)
@@ -1066,7 +1195,7 @@ func visibleCols(width int) []colW {
 // calcRoleW computes Role column width. Role is always column index 3 (after #, Sc, Company).
 func (m PipelineModel) calcRoleW() int {
 	cols := visibleCols(m.width)
-	fixed := 3 + 4 + 16 // #, Sc, Company always visible
+	fixed := 4 + 5 + 16 // #, Sc, Company always visible
 	ncols := len(cols)
 	for _, c := range cols {
 		fixed += c.w
@@ -1091,6 +1220,11 @@ func buildRow(cells []string) string {
 
 // View renders the pipeline screen.
 func (m PipelineModel) View() string {
+	// In compact mode (sidebar layout), skip header/tabs/metrics
+	if m.compact {
+		return m.viewCompact()
+	}
+	
 	header := m.renderHeader()
 	tabs := m.renderTabs()
 	metricsBar := m.renderMetrics()
@@ -1130,7 +1264,72 @@ func (m PipelineModel) View() string {
 		sections = append(sections, inputBar)
 	}
 	sections = append(sections, body, preview, help)
-	return lipgloss.JoinVertical(lipgloss.Left, sections...)
+
+	result := lipgloss.JoinVertical(lipgloss.Left, sections...)
+
+	// Help overlay
+	if m.showHelp {
+		result = m.overlayHelp(result)
+	}
+
+	return result
+}
+
+// viewCompact renders the pipeline in compact mode (no header/tabs/metrics).
+func (m PipelineModel) viewCompact() string {
+	sortBar := m.renderSortBar()
+	searchBar := m.renderSearchBar()
+	body := m.renderBody()
+	preview := m.renderPreview()
+	help := m.renderHelp()
+
+	// Apply scroll to body
+	bodyLines := strings.Split(body, "\n")
+	if m.scrollOffset > 0 && m.scrollOffset < len(bodyLines) {
+		bodyLines = bodyLines[m.scrollOffset:]
+	}
+
+	// Calculate available height for body
+	previewLines := strings.Count(preview, "\n") + 1
+	// In compact mode, use fewer chrome rows
+	chromeRows := 2 // sortBar + help
+	if searchBar != "" {
+		chromeRows++
+	}
+	if inputBar := m.renderInputBar(); inputBar != "" {
+		chromeRows++
+	}
+	availHeight := m.height - chromeRows - previewLines
+	if availHeight < 3 {
+		availHeight = 3
+	}
+	if len(bodyLines) > availHeight {
+		bodyLines = bodyLines[:availHeight]
+	}
+	body = strings.Join(bodyLines, "\n")
+
+	// Status picker overlay
+	if m.statusPicker {
+		body = m.overlayStatusPicker(body)
+	}
+
+	sections := []string{sortBar}
+	if searchBar != "" {
+		sections = append(sections, searchBar)
+	}
+	if inputBar := m.renderInputBar(); inputBar != "" {
+		sections = append(sections, inputBar)
+	}
+	sections = append(sections, body, preview, help)
+
+	result := lipgloss.JoinVertical(lipgloss.Left, sections...)
+
+	// Help overlay
+	if m.showHelp {
+		result = m.overlayHelp(result)
+	}
+
+	return result
 }
 
 // renderInputBar renders the `:` / `!` / `u` input line when active.
@@ -1205,12 +1404,25 @@ func (m PipelineModel) renderHeader() string {
 		Width(m.width).
 		Padding(0, 2)
 
-	title := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Blue).Render("📋 CAREER PIPELINE")
+	// Enhanced title with better styling
+	title := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Blue).Render("  CAREER PIPELINE")
 
+	// Enhanced stats with better formatting
 	right := lipgloss.NewStyle().Foreground(m.theme.Subtext)
 	avg := fmt.Sprintf("%.1f", m.metrics.AvgScore)
 	top := fmt.Sprintf("%.1f", m.metrics.TopScore)
-	stats := right.Render(fmt.Sprintf("%d lamaran · rata² %s/5 · tertinggi %s", m.metrics.Total, avg, top))
+	
+	// Color code the stats
+	avgStyle := lipgloss.NewStyle().Foreground(m.theme.Yellow).Bold(true)
+	topStyle := lipgloss.NewStyle().Foreground(m.theme.Green).Bold(true)
+	totalStyle := lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true)
+	
+	stats := right.Render("  ") +
+		totalStyle.Render(fmt.Sprintf("%d", m.metrics.Total)) + right.Render(" lamaran") +
+		right.Render(" · ") +
+		avgStyle.Render(avg) + right.Render("/5 avg") +
+		right.Render(" · ") +
+		topStyle.Render(top) + right.Render(" top")
 
 	gap := m.width - lipgloss.Width(title) - lipgloss.Width(stats) - 4
 	if gap < 1 {
@@ -1227,18 +1439,21 @@ func (m PipelineModel) renderTabs() string {
 		count := m.countForFilter(tab.filter)
 		statusColor := m.statusColorMap()[tab.filter]
 
-		// Pill-style tabs with colored dots
+		// Enhanced pill-style tabs with colored dots and better styling
 		dot := lipgloss.NewStyle().Foreground(statusColor).Render("●")
 		label := fmt.Sprintf(" %s %s %d ", dot, tab.label, count)
 
 		if i == m.activeTab {
+			// Active tab with highlight background
 			style := lipgloss.NewStyle().
 				Bold(true).
 				Foreground(m.theme.Base).
 				Background(m.theme.Blue).
-				Padding(0, 0)
+				Padding(0, 1).
+				MarginRight(1)
 			tabs = append(tabs, style.Render(label))
 		} else {
+			// Inactive tab with subtle styling
 			style := lipgloss.NewStyle().
 				Foreground(m.theme.Subtext).
 				Padding(0, 0)
@@ -1248,8 +1463,8 @@ func (m PipelineModel) renderTabs() string {
 
 	row := strings.Join(tabs, "")
 
-	// Separator line below tabs
-	sep := lipgloss.NewStyle().Foreground(m.theme.Surface).Render(strings.Repeat("─", m.width))
+	// Separator line below tabs with gradient effect
+	sep := lipgloss.NewStyle().Foreground(m.theme.Overlay).Render(strings.Repeat("─", m.width))
 
 	padStyle := lipgloss.NewStyle().Padding(0, 1)
 	return padStyle.Render(row) + "\n" + padStyle.Render(sep)
@@ -1284,6 +1499,15 @@ func (m PipelineModel) renderMetrics() string {
 	var parts []string
 	statusColors := m.statusColorMap()
 
+	// Add total count first
+	totalStyle := lipgloss.NewStyle().Foreground(m.theme.Text).Bold(true)
+	parts = append(parts, totalStyle.Render(fmt.Sprintf("TOTAL: %d", m.metrics.Total)))
+
+	// Add separator
+	sepStyle := lipgloss.NewStyle().Foreground(m.theme.Overlay)
+	parts = append(parts, sepStyle.Render("│"))
+
+	// Add status counts with enhanced styling
 	for _, status := range statusGroupOrder {
 		count, ok := m.metrics.ByStatus[status]
 		if !ok || count == 0 {
@@ -1294,6 +1518,14 @@ func (m PipelineModel) renderMetrics() string {
 		parts = append(parts, s.Render(fmt.Sprintf("%d", count))+
 			lipgloss.NewStyle().Foreground(m.theme.Subtext).Render(statusLabel(status)))
 	}
+
+	// Add separator
+	parts = append(parts, sepStyle.Render("│"))
+
+	// Add score summary
+	scoreStyle := lipgloss.NewStyle().Foreground(m.theme.Yellow).Bold(true)
+	parts = append(parts, scoreStyle.Render(fmt.Sprintf("AVG: %.1f", m.metrics.AvgScore)))
+	parts = append(parts, scoreStyle.Render(fmt.Sprintf("TOP: %.1f", m.metrics.TopScore)))
 
 	return style.Render(strings.Join(parts, "  "))
 }
@@ -1327,8 +1559,15 @@ func (m PipelineModel) renderSortBar() string {
 		sortDir = "▲"
 	}
 
-	return style.Render(fmt.Sprintf("%s %s %s · %d shown%s",
-		sortIcon, m.sortMode+" "+sortDir, viewIcon, len(m.filtered), searchHint))
+	// Compare mode indicator
+	compareHint := ""
+	if m.compareMode {
+		compareHint = lipgloss.NewStyle().Foreground(m.theme.Peach).Render(
+			fmt.Sprintf("  [CMP:%d]", len(m.compareSelected)))
+	}
+
+	return style.Render(fmt.Sprintf("%s %s %s · %d shown%s%s",
+		sortIcon, m.sortMode+" "+sortDir, viewIcon, len(m.filtered), searchHint, compareHint))
 }
 
 func (m PipelineModel) renderBody() string {
@@ -1346,6 +1585,9 @@ func (m PipelineModel) renderBody() string {
 	// Column header (in flat mode or as first line in grouped)
 	if m.viewMode == "flat" {
 		lines = append(lines, padStyle.Render(m.renderColumnHeader()))
+		// Separator line under header
+		sepStyle := lipgloss.NewStyle().Foreground(m.theme.Overlay)
+		lines = append(lines, padStyle.Render(sepStyle.Render(strings.Repeat("─", m.width-4))))
 	}
 
 	for i, app := range m.filtered {
@@ -1357,7 +1599,8 @@ func (m PipelineModel) renderBody() string {
 			color := m.statusColorMap()[norm]
 			grpStyle := lipgloss.NewStyle().Bold(true).Foreground(color)
 			dimStyle := lipgloss.NewStyle().Foreground(m.theme.Overlay)
-			// Clean group header: "● Interview (1)" with dots
+
+			// Status icon with emoji
 			statusIcon := map[string]string{
 				"interview": "🎯", "offer": "🎉", "responded": "📬",
 				"applied": "📤", "evaluated": "📋", "skip": "⏭",
@@ -1366,29 +1609,51 @@ func (m PipelineModel) renderBody() string {
 			if statusIcon == "" {
 				statusIcon = "●"
 			}
+
+			// Progress bar for group (shows count relative to total)
+			totalApps := len(m.filtered)
+			progressW := 15
+			filled := 0
+			if totalApps > 0 {
+				filled = count * progressW / totalApps
+			}
+			progressBar := lipgloss.NewStyle().Foreground(color).Render(strings.Repeat("█", filled))
+			progressBar += dimStyle.Render(strings.Repeat("░", progressW-filled))
+
 			label := fmt.Sprintf(" %s %s (%d) ", statusIcon, statusLabel(norm), count)
-			remaining := m.width - 4 - lipgloss.Width(label)
+			remaining := m.width - 4 - lipgloss.Width(label) - progressW - 2
 			if remaining < 0 {
 				remaining = 0
 			}
 			separator := dimStyle.Render(strings.Repeat("─", remaining))
 			lines = append(lines, padStyle.Render(
-				grpStyle.Render(label)+separator,
+				grpStyle.Render(label)+separator+progressBar,
 			))
 			// Column header for each group
 			lines = append(lines, padStyle.Render(m.renderColumnHeader()))
+			lines = append(lines, padStyle.Render(dimStyle.Render(strings.Repeat("─", m.width-4))))
 			prevStatus = norm
 		}
 
 		selected := i == m.cursor
-		line := m.renderAppLine(app, selected)
+		compareSelected := m.compareSelected[i]
+		isExpanded := m.expandedRows[i]
+		isMultiSelected := m.selectedRows[i]
+		isDragging := m.dragMode && i == m.dragIndex
+		line := m.renderAppLine(app, selected, compareSelected, isExpanded, isMultiSelected, isDragging)
 		lines = append(lines, line)
+
+		// Render expanded details if row is expanded
+		if isExpanded {
+			expandedLines := m.renderExpandedDetails(app)
+			lines = append(lines, expandedLines...)
+		}
 	}
 
 	return strings.Join(lines, "\n")
 }
 
-func (m PipelineModel) renderAppLine(app model.CareerApplication, selected bool) string {
+func (m PipelineModel) renderAppLine(app model.CareerApplication, selected bool, compareSelected bool, isExpanded bool, isMultiSelected bool, isDragging bool) string {
 	padStyle := lipgloss.NewStyle().Padding(0, 2)
 	norm := data.NormalizeStatus(app.Status)
 	isDead := norm == "rejected" || norm == "discarded" || norm == "skip"
@@ -1436,7 +1701,7 @@ func (m PipelineModel) renderAppLine(app model.CareerApplication, selected bool)
 	st := dim(lipgloss.NewStyle().Foreground(m.statusColorMap()[norm]))
 
 	// ── Build columns — SAME ORDER as renderColumnHeader ────────
-	// 1. # (always)
+	// 1. # (always) - with compare and expand indicator
 	numText := "#"
 	if app.Number > 0 {
 		numText = fmt.Sprintf("#%d", app.Number)
@@ -1444,11 +1709,40 @@ func (m PipelineModel) renderAppLine(app model.CareerApplication, selected bool)
 	if isDead {
 		numText = "x" + numText
 	}
+	
+	// Expand/collapse indicator (plain text, no styling)
+	expandIndicator := " "
+	if isExpanded {
+		expandIndicator = "▾"
+	} else {
+		expandIndicator = "▸"
+	}
+	
+	numStyle := blue
+	if compareSelected {
+		numStyle = dim(lipgloss.NewStyle().Foreground(m.theme.Peach).Bold(true))
+		numText = "▸" + numText[1:]
+	}
+	
+	// Prepend expand indicator to numText
+	numText = expandIndicator + numText
 
-	// 2-4. Score, Company, Role (always)
+	// 2-4. Score, Company, Role (always) - with enhanced score visualization
+	scoreText := fmt.Sprintf("%.1f", app.Score)
+	scoreStyle := dim(m.scoreStyle(app.Score))
+
+	// Add mini score bar for high scores
+	if app.Score >= 4.0 {
+		scoreText = fmt.Sprintf("%.1f█", app.Score)
+	} else if app.Score >= 3.0 {
+		scoreText = fmt.Sprintf("%.1f▌", app.Score)
+	} else if app.Score > 0 {
+		scoreText = fmt.Sprintf("%.1f.", app.Score)
+	}
+
 	cells := []string{
-		colCell(blue, numText, 3),
-		colCell(dim(m.scoreStyle(app.Score)), fmt.Sprintf("%.1f", app.Score), 4),
+		colCell(numStyle, numText, 4),
+		colCell(scoreStyle, scoreText, 5),
 		colCell(txt, app.Company, 16),
 		colCell(sub, app.Role, roleW),
 	}
@@ -1480,10 +1774,124 @@ func (m PipelineModel) renderAppLine(app model.CareerApplication, selected bool)
 
 	line := buildRow(cells)
 	if selected {
-		sel := lipgloss.NewStyle().Background(m.theme.Overlay).Width(m.width - 4)
-		return padStyle.Render(sel.Render(line))
+		// Enhanced selected row with better visual feedback
+		selStyle := lipgloss.NewStyle().
+			Background(m.theme.Overlay).
+			Foreground(m.theme.Text).
+			Width(m.width - 4)
+		return padStyle.Render(selStyle.Render(" " + line + " "))
+	}
+	if compareSelected {
+		// Compare selected row with different highlight
+		compareStyle := lipgloss.NewStyle().
+			Background(lipgloss.Color("52")).
+			Foreground(m.theme.Peach).
+			Width(m.width - 4)
+		return padStyle.Render(compareStyle.Render(" " + line + " "))
 	}
 	return padStyle.Render(line)
+}
+
+// renderExpandedDetails renders the expanded details for a row.
+func (m PipelineModel) renderExpandedDetails(app model.CareerApplication) []string {
+	padStyle := lipgloss.NewStyle().Padding(0, 2)
+	dimStyle := lipgloss.NewStyle().Foreground(m.theme.Subtext)
+	labelStyle := lipgloss.NewStyle().Foreground(m.theme.Sky).Bold(true)
+	valueStyle := lipgloss.NewStyle().Foreground(m.theme.Text)
+	detailWidth := m.width - 8
+
+	var lines []string
+
+	// Separator line
+	lines = append(lines, padStyle.Render(dimStyle.Render(strings.Repeat("─", detailWidth))))
+
+	// Parse notes for additional info
+	nRemote, nLocation, nComp := parseNotes(app.Notes)
+	remoteText, locText, compText := nRemote, nLocation, ""
+	if s, ok := m.reportCache[app.ReportPath]; ok {
+		if s.remote != "" {
+			remoteText = s.remote
+		}
+		if s.comp != "" {
+			compText = s.comp
+		}
+	}
+	if compText == "" {
+		compText = nComp
+	}
+	if locText == "" && strings.Contains(remoteText, ",") {
+		parts := strings.SplitN(remoteText, ",", 2)
+		remoteText = strings.TrimSpace(parts[0])
+		locText = strings.TrimSpace(parts[1])
+	}
+
+	// Details grid
+	detailLines := []string{}
+
+	// Row 1: Location | Work Mode | Compensation
+	row1 := []string{}
+	if locText != "" {
+		row1 = append(row1, labelStyle.Render("Loc: ")+valueStyle.Render(locText))
+	}
+	if remoteText != "" {
+		row1 = append(row1, labelStyle.Render("Mode: ")+valueStyle.Render(remoteText))
+	}
+	if compText != "" {
+		row1 = append(row1, labelStyle.Render("Comp: ")+valueStyle.Render(compText))
+	}
+	if len(row1) > 0 {
+		detailLines = append(detailLines, strings.Join(row1, "  │  "))
+	}
+
+	// Row 2: Type | Domain | Level
+	row2 := []string{}
+	if s, ok := m.reportCache[app.ReportPath]; ok {
+		if s.archetype != "" {
+			row2 = append(row2, labelStyle.Render("Type: ")+valueStyle.Render(s.archetype))
+		}
+		if s.domain != "" {
+			row2 = append(row2, labelStyle.Render("Domain: ")+valueStyle.Render(s.domain))
+		}
+		if s.seniority != "" {
+			row2 = append(row2, labelStyle.Render("Level: ")+valueStyle.Render(s.seniority))
+		}
+	}
+	if len(row2) > 0 {
+		detailLines = append(detailLines, strings.Join(row2, "  │  "))
+	}
+
+	// Row 3: Notes/TL;DR
+	noteText := ""
+	if s, ok := m.reportCache[app.ReportPath]; ok && s.tldr != "" {
+		noteText = s.tldr
+	} else if app.Notes != "" {
+		noteText = app.Notes
+	}
+	if noteText != "" {
+		detailLines = append(detailLines, labelStyle.Render("Note: ")+dimStyle.Render(truncateRunes(noteText, detailWidth-8)))
+	}
+
+	// Row 4: Report link and URL
+	if app.ReportPath != "" || app.JobURL != "" {
+		linkParts := []string{}
+		if app.ReportPath != "" {
+			linkParts = append(linkParts, lipgloss.NewStyle().Foreground(m.theme.Blue).Render(app.ReportPath))
+		}
+		if app.JobURL != "" {
+			linkParts = append(linkParts, lipgloss.NewStyle().Foreground(m.theme.Sky).Render(truncateRunes(app.JobURL, detailWidth/2)))
+		}
+		detailLines = append(detailLines, strings.Join(linkParts, "  │  "))
+	}
+
+	// Add detail lines with padding
+	for _, dl := range detailLines {
+		lines = append(lines, padStyle.Render("  "+dl))
+	}
+
+	// Closing separator
+	lines = append(lines, padStyle.Render(dimStyle.Render(strings.Repeat("─", detailWidth))))
+
+	return lines
 }
 
 // livenessCell returns the Live column text and its style.
@@ -1596,9 +2004,9 @@ func (m PipelineModel) renderColumnHeader() string {
 	}
 	sortedCol := sortColMap[m.sortMode]
 
-	// Build header cells with sort indicator
+	// Build header cells with sort indicator and enhanced styling
 	cells := []string{
-		colCell(hdr, "#", 3), colCell(hdr, "Sc", 4), colCell(hdr, "Company", 16),
+		colCell(hdr, "#", 4), colCell(hdr, "Sc", 5), colCell(hdr, "Company", 16),
 		colCell(hdr, "Role", roleW),
 	}
 	for _, c := range cols {
@@ -1607,7 +2015,8 @@ func (m PipelineModel) renderColumnHeader() string {
 		}
 		h := c.hdr
 		if h == sortedCol {
-			h = h + " ▼"
+			// Highlight sorted column header
+			h = lipgloss.NewStyle().Bold(true).Foreground(m.theme.Yellow).Render(h + " ▼")
 		}
 		cells = append(cells, colCell(hdr, h, c.w))
 	}
@@ -1623,45 +2032,63 @@ func (m PipelineModel) renderPreview() string {
 	pad := lipgloss.NewStyle().Padding(0, 2)
 	dim := lipgloss.NewStyle().Foreground(m.theme.Subtext)
 	bold := lipgloss.NewStyle().Bold(true)
-	label := lipgloss.NewStyle().Foreground(m.theme.Sky).Bold(true)
 	green := lipgloss.NewStyle().Foreground(m.theme.Green).Bold(true)
 	yellow := lipgloss.NewStyle().Foreground(m.theme.Yellow)
 	mauve := lipgloss.NewStyle().Foreground(m.theme.Mauve)
+	red := lipgloss.NewStyle().Foreground(m.theme.Red)
 
-	// Separator
+	// Separator with gradient effect
 	sep := dim.Render(strings.Repeat("─", m.width-4))
 
-	// Line 1: "Company — Role"
+	// Line 1: "Company — Role" with enhanced styling
 	title := bold.Foreground(m.theme.Text).Render(truncateRunes(
-		fmt.Sprintf("%s — %s", app.Company, app.Role), m.width-6))
+		fmt.Sprintf("  %s — %s", app.Company, app.Role), m.width-6))
 
-	// Line 2: score bar + verdict + days
+	// Line 2: Enhanced score bar + verdict + days
 	scoreLine := ""
 	if app.Score > 0 {
+		// Enhanced score bar with gradient colors
 		filled := int(app.Score * 2)
 		if filled > 10 {
 			filled = 10
 		}
-		bar := m.scoreStyle(app.Score).Render(strings.Repeat("█", filled))
+		
+		// Color gradient for score bar
+		bar := ""
+		for i := 0; i < filled; i++ {
+			if i < 4 {
+				bar += lipgloss.NewStyle().Foreground(m.theme.Red).Render("█")
+			} else if i < 7 {
+				bar += lipgloss.NewStyle().Foreground(m.theme.Yellow).Render("█")
+			} else {
+				bar += lipgloss.NewStyle().Foreground(m.theme.Green).Render("█")
+			}
+		}
 		bar += dim.Render(strings.Repeat("░", 10-filled))
-		bar += fmt.Sprintf(" %.1f/5", app.Score)
+		
+		// Score with color coding
+		scoreStyle := m.scoreStyle(app.Score)
+		bar += scoreStyle.Render(fmt.Sprintf(" %.1f/5", app.Score))
 
+		// Verdict with enhanced styling
 		verdict := ""
 		if app.Score >= 4.0 {
 			verdict = green.Render("  ✓ LAYAK APPLY")
 		} else if app.Score >= 3.0 {
 			verdict = yellow.Render("  ? PERTIMBANGKAN")
 		} else if app.Score > 0 {
-			verdict = lipgloss.NewStyle().Foreground(m.theme.Red).Render("  ✗ SKIP")
+			verdict = red.Render("  ✗ SKIP")
 		}
+		
+		// Days since application
 		days := ""
 		if d := daysSince(app.Date); d != "" {
-			days = dim.Render("  " + d)
+			days = dim.Render("  (" + d + ")")
 		}
 		scoreLine = bar + verdict + days
 	}
 
-	// Line 3: status | date | location | work mode
+	// Line 3: Enhanced status info with icons
 	nRemote, nLocation, nComp := parseNotes(app.Notes)
 	remoteText, locText, compText := nRemote, nLocation, ""
 	if s, ok := m.reportCache[app.ReportPath]; ok {
@@ -1681,31 +2108,35 @@ func (m PipelineModel) renderPreview() string {
 		locText = strings.TrimSpace(parts2[1])
 	}
 
-	// Compact info line
+	// Status with color coding
+	statusColor := m.statusColorMap()[data.NormalizeStatus(app.Status)]
+	statusStyle := lipgloss.NewStyle().Foreground(statusColor).Bold(true)
+	
+	// Info parts with enhanced icons
 	infoParts := []string{}
-	infoParts = append(infoParts, label.Render("● ")+bold.Render(app.Status))
+	infoParts = append(infoParts, statusStyle.Render("● ")+bold.Render(app.Status))
 	if locText != "" {
-		infoParts = append(infoParts, dim.Render("📍 ")+locText)
+		infoParts = append(infoParts, dim.Render(" ")+lipgloss.NewStyle().Foreground(m.theme.Peach).Render(" ")+locText)
 	}
 	if remoteText != "" {
-		infoParts = append(infoParts, dim.Render("🏠 ")+remoteText)
+		infoParts = append(infoParts, dim.Render(" ")+lipgloss.NewStyle().Foreground(m.theme.Sky).Render(" ")+remoteText)
 	}
 	if compText != "" {
-		infoParts = append(infoParts, yellow.Render("💰 ")+compText)
+		infoParts = append(infoParts, yellow.Render(" ")+compText)
 	}
 	infoLine := strings.Join(infoParts, "  ")
 
-	// Line 4: type + domain + level
+	// Line 4: Enhanced type + domain + level with better formatting
 	extraParts := []string{}
 	if s, ok := m.reportCache[app.ReportPath]; ok {
 		if s.archetype != "" {
 			extraParts = append(extraParts, dim.Render("Type: ")+mauve.Render(s.archetype))
 		}
 		if s.domain != "" {
-			extraParts = append(extraParts, dim.Render("Domain: ")+s.domain)
+			extraParts = append(extraParts, dim.Render("Domain: ")+mauve.Render(s.domain))
 		}
 		if s.seniority != "" {
-			extraParts = append(extraParts, dim.Render("Level: ")+s.seniority)
+			extraParts = append(extraParts, dim.Render("Level: ")+mauve.Render(s.seniority))
 		}
 	}
 	extraLine := ""
@@ -1713,19 +2144,19 @@ func (m PipelineModel) renderPreview() string {
 		extraLine = strings.Join(extraParts, "  │  ")
 	}
 
-	// Line 5: TL;DR or Notes
+	// Line 5: TL;DR or Notes with better styling
 	noteLine := ""
 	if s, ok := m.reportCache[app.ReportPath]; ok && s.tldr != "" {
-		noteLine = dim.Render(truncateRunes(s.tldr, m.width-6))
+		noteLine = dim.Render(" " + truncateRunes(s.tldr, m.width-6))
 	} else if app.Notes != "" {
-		noteLine = dim.Render(truncateRunes(app.Notes, m.width-6))
+		noteLine = dim.Render(" " + truncateRunes(app.Notes, m.width-6))
 	}
 
-	// Line 6: Report link
+	// Line 6: Enhanced report link with better formatting
 	rptLine := ""
 	if app.ReportPath != "" {
 		rptLine = lipgloss.NewStyle().Foreground(m.theme.Blue).Render(
-			fmt.Sprintf("📄 %s", app.ReportPath))
+			fmt.Sprintf("  %s", app.ReportPath))
 	}
 	if app.JobURL != "" {
 		rptLine += dim.Render("  │  ") + lipgloss.NewStyle().Foreground(m.theme.Sky).Render(
@@ -1735,19 +2166,19 @@ func (m PipelineModel) renderPreview() string {
 			var liveText string
 			switch r.State {
 			case data.LiveActive:
-				liveStyle, liveText = green, "✅ live"
+				liveStyle, liveText = green, "✅ LIVE"
 			case data.LiveExpired:
-				liveStyle, liveText = lipgloss.NewStyle().Foreground(m.theme.Red).Bold(true), "❌ "+truncateRunes(r.Reason, 50)
+				liveStyle, liveText = red, "❌ EXPIRED"
 			case data.LiveUncertain:
-				liveStyle, liveText = yellow, "⚠ "+truncateRunes(r.Reason, 50)
+				liveStyle, liveText = yellow, "⚠ UNCERTAIN"
 			default:
-				liveStyle, liveText = dim, "✗ "+truncateRunes(r.Reason, 50)
+				liveStyle, liveText = dim, "✗ ERROR"
 			}
 			rptLine += dim.Render("  │  ") + liveStyle.Render(liveText)
 		}
 	}
 
-	// Assemble
+	// Assemble with enhanced styling
 	var lines []string
 	lines = append(lines, pad.Render(sep))
 	lines = append(lines, pad.Render(title))
@@ -1764,6 +2195,7 @@ func (m PipelineModel) renderPreview() string {
 	if rptLine != "" {
 		lines = append(lines, pad.Render(rptLine))
 	}
+	lines = append(lines, pad.Render(sep))
 	return strings.Join(lines, "\n")
 }
 
@@ -1788,6 +2220,19 @@ func (m PipelineModel) renderHelp() string {
 				key.Render("Esc") + dim.Render(" batal"))
 	}
 
+	// Compare mode indicator
+	if m.compareMode {
+		compareStyle := lipgloss.NewStyle().
+			Foreground(m.theme.Peach).
+			Bold(true)
+		return lipgloss.NewStyle().Width(m.width).Padding(0, 1).Render(
+			compareStyle.Render(" COMPARE MODE ") +
+				dim.Render(fmt.Sprintf("  %d selected  ", len(m.compareSelected))) +
+				key.Render("Space") + dim.Render(" select  ") +
+				key.Render("Esc") + dim.Render(" exit  ") +
+				key.Render("Enter") + dim.Render(" compare"))
+	}
+
 	// Legend line with styled keys
 	expLegend := dim.Render("Exp ") +
 		green.Render("0") + dim.Render("=entry ") +
@@ -1805,13 +2250,17 @@ func (m PipelineModel) renderHelp() string {
 
 	// Navigation line with styled keys
 	nav := key.Render("↑↓") + dim.Render(" nav ") +
-		key.Render("←→") + dim.Render(" tab ") +
+		key.Render("e") + dim.Render(" expand ") +
+		key.Render("i") + dim.Render(" edit ") +
+		key.Render("m") + dim.Render(" multi ") +
 		key.Render("/") + dim.Render(" cari ") +
 		key.Render("s") + dim.Render(" urut ") +
 		key.Render("⏎") + dim.Render(" buka ") +
 		key.Render("c") + dim.Render(" status ") +
 		key.Render("n") + dim.Render(" baru ") +
+		key.Render("x") + dim.Render(" cmp ") +
 		key.Render("L") + dim.Render(" live ") +
+		key.Render("?") + dim.Render(" help ") +
 		key.Render(":") + dim.Render(" cmd ") +
 		key.Render("!") + dim.Render(" shell ") +
 		key.Render("u") + dim.Render(" url ") +
@@ -2058,4 +2507,127 @@ func miniBar(score float64) string {
 		filled = 4
 	}
 	return strings.Repeat("█", filled) + strings.Repeat("░", 4-filled)
+}
+
+// overlayHelp renders a help overlay on top of the current view.
+func (m PipelineModel) overlayHelp(content string) string {
+	helpWidth := 60
+	if helpWidth > m.width-4 {
+		helpWidth = m.width - 4
+	}
+	helpHeight := 28
+	if helpHeight > m.height-4 {
+		helpHeight = m.height - 4
+	}
+
+	// Help content
+	helpLines := []string{
+		"╔══════════════════════════════════════════════════════════╗",
+		"║                    KEYBOARD SHORTCUTS                   ║",
+		"╠══════════════════════════════════════════════════════════╣",
+		"║  NAVIGATION                                             ║",
+		"║    ↑/↓ or j/k    Move up/down                          ║",
+		"║    ←/→ or h/l    Switch tabs                           ║",
+		"║    g/G            Jump to top/bottom                    ║",
+		"║    PgUp/PgDn      Page up/down                         ║",
+		"║    1-8            Jump to tab by number                 ║",
+		"╠══════════════════════════════════════════════════════════╣",
+		"║  ROW INTERACTIONS                                       ║",
+		"║    e              Expand/collapse row details           ║",
+		"║    i              Inline edit notes                    ║",
+		"║    Enter          Open report viewer                   ║",
+		"║    o              Open job URL in browser              ║",
+		"╠══════════════════════════════════════════════════════════╣",
+		"║  ACTIONS                                                ║",
+		"║    c              Change status                        ║",
+		"║    n              Add new entry (URL)                  ║",
+		"║    u              Edit job URL                         ║",
+		"║    L              Check liveness (single)              ║",
+		"║    Ctrl+L         Check all stale URLs                 ║",
+		"║    r              Refresh data                         ║",
+		"║    p              Open progress analytics              ║",
+		"╠══════════════════════════════════════════════════════════╣",
+		"║  SELECT & ORGANIZE                                      ║",
+		"║    m              Toggle multi-select mode             ║",
+		"║    Space          Select/deselect item (multi)         ║",
+		"║    x              Toggle compare mode                  ║",
+		"║    Ctrl+J         Start drag mode                      ║",
+		"╠══════════════════════════════════════════════════════════╣",
+		"║  SEARCH & FILTER                                        ║",
+		"║    /              Start search                         ║",
+		"║    Esc            Clear search / close overlay         ║",
+		"║    s              Cycle sort mode                      ║",
+		"║    v              Toggle grouped/flat view             ║",
+		"║    Tab            Toggle sidebar focus                 ║",
+		"║    Ctrl+B         Toggle sidebar                       ║",
+		"╠══════════════════════════════════════════════════════════╣",
+		"║  COMMANDS                                               ║",
+		"║    :              Command bar (:help for list)         ║",
+		"║    !              Shell command                        ║",
+		"║    ?              Toggle this help                     ║",
+		"║    q / Ctrl+C     Quit                                 ║",
+		"╚══════════════════════════════════════════════════════════╝",
+	}
+
+	// Style the help box
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(m.theme.Blue).
+		Width(helpWidth).
+		Align(lipgloss.Center)
+
+	contentStyle := lipgloss.NewStyle().
+		Foreground(m.theme.Text).
+		Width(helpWidth)
+
+	// Build help content
+	var styledLines []string
+	styledLines = append(styledLines, titleStyle.Render("KEYBOARD SHORTCUTS"))
+	styledLines = append(styledLines, "")
+
+	for _, line := range helpLines[2:] {
+		styledLines = append(styledLines, contentStyle.Render(line))
+	}
+
+	helpContent := strings.Join(styledLines, "\n")
+
+	// Create overlay box
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme.Blue).
+		Padding(1, 2).
+		Width(helpWidth).
+		Height(helpHeight)
+
+	box := boxStyle.Render(helpContent)
+
+	// Center the overlay
+	overlayWidth := lipgloss.Width(box)
+	overlayHeight := lipgloss.Height(box)
+
+	startX := (m.width - overlayWidth) / 2
+	startY := (m.height - overlayHeight) / 2
+
+	// Create semi-transparent background
+	bgLines := strings.Split(content, "\n")
+	for i := range bgLines {
+		if i >= startY && i < startY+overlayHeight {
+			overlayLine := i - startY
+			overlayLineContent := strings.Split(box, "\n")[overlayLine]
+			if startX > 0 && startX+overlayWidth <= m.width {
+				// Replace the center portion with overlay content
+				prefix := ""
+				if startX > 0 {
+					prefix = bgLines[i][:startX]
+				}
+				suffix := ""
+				if startX+overlayWidth < len(bgLines[i]) {
+					suffix = bgLines[i][startX+overlayWidth:]
+				}
+				bgLines[i] = prefix + overlayLineContent + suffix
+			}
+		}
+	}
+
+	return strings.Join(bgLines, "\n")
 }

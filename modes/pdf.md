@@ -20,7 +20,23 @@
 14. Read `name` from `config/profile.yml` → normalize to kebab-case lowercase (e.g. "John Doe" → "john-doe") → `{candidate}`
 15. Write HTML to `/tmp/{doc_type}-{candidate}-{company}.html`
 16. Execute: `node generate-pdf.mjs /tmp/{doc_type}-{candidate}-{company}.html output/{doc_type}-{candidate}-{company}-{YYYY-MM-DD}.pdf --format={letter|a4}`
-17. Report: PDF path, number of pages, keyword coverage %
+17. **Check page count (MANDATORY):** the script prints `📊 Pages: N`. If N > 1, condense content (fewer bullets per older role, trim least-relevant items, tighten the summary) and regenerate until exactly 1 page. NEVER shrink fonts below 9pt or reduce margins to force a fit.
+18. Report: PDF path, number of pages, keyword coverage %
+
+## One-Page Rule (CRITICAL)
+
+The final PDF MUST be exactly 1 page, matching `templates/cv-example.jpg`. To fit:
+- Max 3 bullets for the most recent/relevant roles, 2 for older ones
+- Merge short related bullets; cut items with the least JD relevance
+- Keep font sizes and margins at template values — fit by trimming content, not by shrinking text
+
+## Clickable Links (CRITICAL)
+
+All contact info in the header MUST be real hyperlinks:
+- Email → `<a href="mailto:{email}">{email}</a>`
+- Phone → `<a href="tel:{phone-no-spaces}">{phone}</a>` (strip spaces/dashes in the `tel:` URL only)
+- LinkedIn / GitHub / portfolio → `<a href="https://...">display text</a>` (full URL with scheme)
+- Links keep black text, no underline (already styled in `.contact-row a`)
 
 ## Naming Convention: CV vs Resume
 

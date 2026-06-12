@@ -1,6 +1,7 @@
 package screens
 
 import (
+	"fmt"
 	"os"
 	"regexp"
 	"strings"
@@ -22,9 +23,17 @@ type ViewerModel struct {
 	renderedLines []string
 	title         string
 	scrollOffset  int
+	cursorLine    int    // current cursor position in visible area
 	width         int
 	height        int
 	theme         theme.Theme
+	// Search state
+	searchMode  bool
+	searchQuery string
+	searchMatches []int // line indices that match
+	currentMatch int   // index into searchMatches
+	// Line numbers
+	showLineNumbers bool
 }
 
 // NewViewerModel creates a new file viewer for the given path.
@@ -40,11 +49,13 @@ func NewViewerModel(t theme.Theme, path, title string, width, height int) Viewer
 	}
 
 	m := ViewerModel{
-		lines:  lines,
-		title:  title,
-		width:  width,
-		height: height,
-		theme:  t,
+		lines:           lines,
+		title:           title,
+		width:           width,
+		height:          height,
+		theme:           t,
+		cursorLine:      0,
+		showLineNumbers: true,
 	}
 	m.rebuildRender()
 	return m
@@ -54,6 +65,7 @@ func NewViewerModel(t theme.Theme, path, title string, width, height int) Viewer
 func (m *ViewerModel) rebuildRender() {
 	m.renderedLines = m.renderAll()
 	m.clampScrollOffset()
+	m.clampCursor()
 }
 
 func (m *ViewerModel) clampScrollOffset() {
@@ -66,6 +78,19 @@ func (m *ViewerModel) clampScrollOffset() {
 	}
 	if m.scrollOffset < 0 {
 		m.scrollOffset = 0
+	}
+}
+
+func (m *ViewerModel) clampCursor() {
+	maxCursor := m.bodyHeight() - 1
+	if maxCursor < 0 {
+		maxCursor = 0
+	}
+	if m.cursorLine > maxCursor {
+		m.cursorLine = maxCursor
+	}
+	if m.cursorLine < 0 {
+		m.cursorLine = 0
 	}
 }
 
@@ -82,11 +107,76 @@ func (m *ViewerModel) Resize(width, height int) {
 func (m ViewerModel) Update(msg tea.Msg) (ViewerModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Search mode handling
+		if m.searchMode {
+			return m.handleSearchInput(msg)
+		}
+
 		switch msg.String() {
 		case "q", "esc":
 			return m, func() tea.Msg { return ViewerClosedMsg{} }
 
+		// Cursor movement (vim-style)
 		case "down", "j":
+			m.moveCursorDown()
+
+		case "up", "k":
+			m.moveCursorUp()
+
+		// Page movement
+		case "pgdown", "ctrl+d":
+			m.pageDown()
+
+		case "pgup", "ctrl+u":
+			m.pageUp()
+
+		// Jump to boundaries
+		case "home", "g", "gg":
+			m.scrollOffset = 0
+			m.cursorLine = 0
+
+		case "end", "G":
+			m.scrollToBottom()
+
+		// Half-page movement
+		case "ctrl+f":
+			m.halfPageDown()
+
+		case "ctrl+b":
+			m.halfPageUp()
+
+		// Center cursor
+		case "ctrl+e":
+			m.centerCursor()
+
+		// Search
+		case "/":
+			m.searchMode = true
+			m.searchQuery = ""
+
+		case "n":
+			m.nextSearchMatch()
+
+		case "N":
+			m.prevSearchMatch()
+
+		// Toggle line numbers
+		case "F2":
+			m.showLineNumbers = !m.showLineNumbers
+
+		// Jump to line (number prefix)
+		case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9":
+			// Could implement number prefix for g jumps
+		}
+
+	case tea.MouseMsg:
+		// Mouse scroll support - scroll the view directly
+		switch msg.Type {
+		case tea.MouseWheelUp:
+			if m.scrollOffset > 0 {
+				m.scrollOffset--
+			}
+		case tea.MouseWheelDown:
 			maxScroll := len(m.renderedLines) - m.bodyHeight()
 			if maxScroll < 0 {
 				maxScroll = 0
@@ -94,39 +184,6 @@ func (m ViewerModel) Update(msg tea.Msg) (ViewerModel, tea.Cmd) {
 			if m.scrollOffset < maxScroll {
 				m.scrollOffset++
 			}
-
-		case "up", "k":
-			if m.scrollOffset > 0 {
-				m.scrollOffset--
-			}
-
-		case "pgdown", "ctrl+d":
-			jump := m.bodyHeight() / 2
-			maxScroll := len(m.renderedLines) - m.bodyHeight()
-			if maxScroll < 0 {
-				maxScroll = 0
-			}
-			m.scrollOffset += jump
-			if m.scrollOffset > maxScroll {
-				m.scrollOffset = maxScroll
-			}
-
-		case "pgup", "ctrl+u":
-			jump := m.bodyHeight() / 2
-			m.scrollOffset -= jump
-			if m.scrollOffset < 0 {
-				m.scrollOffset = 0
-			}
-
-		case "home", "g":
-			m.scrollOffset = 0
-
-		case "end", "G":
-			maxScroll := len(m.renderedLines) - m.bodyHeight()
-			if maxScroll < 0 {
-				maxScroll = 0
-			}
-			m.scrollOffset = maxScroll
 		}
 
 	case tea.WindowSizeMsg:
@@ -138,8 +195,185 @@ func (m ViewerModel) Update(msg tea.Msg) (ViewerModel, tea.Cmd) {
 	return m, nil
 }
 
+// handleSearchInput handles keyboard input during search mode.
+func (m ViewerModel) handleSearchInput(msg tea.KeyMsg) (ViewerModel, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.searchMode = false
+		m.searchQuery = ""
+		m.searchMatches = nil
+		return m, nil
+
+	case "enter":
+		m.searchMode = false
+		m.findSearchMatches()
+		if len(m.searchMatches) > 0 {
+			m.currentMatch = 0
+			m.jumpToMatch(0)
+		}
+		return m, nil
+
+	case "backspace":
+		if len(m.searchQuery) > 0 {
+			runes := []rune(m.searchQuery)
+			m.searchQuery = string(runes[:len(runes)-1])
+		}
+		return m, nil
+	}
+
+	// Append printable characters
+	if r := msg.Runes; len(r) > 0 {
+		m.searchQuery += string(r)
+	}
+
+	return m, nil
+}
+
+func (m *ViewerModel) moveCursorDown() {
+	bodyH := m.bodyHeight()
+	maxScroll := len(m.renderedLines) - bodyH
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+
+	if m.cursorLine < bodyH-1 {
+		m.cursorLine++
+	} else if m.scrollOffset < maxScroll {
+		m.scrollOffset++
+	}
+}
+
+func (m *ViewerModel) moveCursorUp() {
+	if m.cursorLine > 0 {
+		m.cursorLine--
+	} else if m.scrollOffset > 0 {
+		m.scrollOffset--
+	}
+}
+
+func (m *ViewerModel) pageDown() {
+	jump := m.bodyHeight() / 2
+	maxScroll := len(m.renderedLines) - m.bodyHeight()
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	m.scrollOffset += jump
+	if m.scrollOffset > maxScroll {
+		m.scrollOffset = maxScroll
+	}
+}
+
+func (m *ViewerModel) pageUp() {
+	jump := m.bodyHeight() / 2
+	m.scrollOffset -= jump
+	if m.scrollOffset < 0 {
+		m.scrollOffset = 0
+	}
+}
+
+func (m *ViewerModel) scrollToBottom() {
+	maxScroll := len(m.renderedLines) - m.bodyHeight()
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	m.scrollOffset = maxScroll
+	m.cursorLine = m.bodyHeight() - 1
+}
+
+func (m *ViewerModel) halfPageDown() {
+	jump := m.bodyHeight() / 4
+	if jump < 1 {
+		jump = 1
+	}
+	m.cursorLine += jump
+	bodyH := m.bodyHeight()
+	if m.cursorLine >= bodyH {
+		m.scrollOffset += m.cursorLine - bodyH + 1
+		m.cursorLine = bodyH - 1
+	}
+	maxScroll := len(m.renderedLines) - bodyH
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if m.scrollOffset > maxScroll {
+		m.scrollOffset = maxScroll
+	}
+}
+
+func (m *ViewerModel) halfPageUp() {
+	jump := m.bodyHeight() / 4
+	if jump < 1 {
+		jump = 1
+	}
+	m.cursorLine -= jump
+	if m.cursorLine < 0 {
+		m.scrollOffset += m.cursorLine
+		m.cursorLine = 0
+	}
+	if m.scrollOffset < 0 {
+		m.scrollOffset = 0
+	}
+}
+
+func (m *ViewerModel) centerCursor() {
+	bodyH := m.bodyHeight()
+	center := bodyH / 2
+	m.cursorLine = center
+}
+
+func (m *ViewerModel) findSearchMatches() {
+	m.searchMatches = nil
+	if m.searchQuery == "" {
+		return
+	}
+	query := strings.ToLower(m.searchQuery)
+	for i, line := range m.renderedLines {
+		if strings.Contains(strings.ToLower(line), query) {
+			m.searchMatches = append(m.searchMatches, i)
+		}
+	}
+}
+
+func (m *ViewerModel) jumpToMatch(matchIdx int) {
+	if matchIdx < 0 || matchIdx >= len(m.searchMatches) {
+		return
+	}
+	targetLine := m.searchMatches[matchIdx]
+	bodyH := m.bodyHeight()
+
+	// Ensure the line is visible
+	if targetLine < m.scrollOffset {
+		m.scrollOffset = targetLine
+		m.cursorLine = 0
+	} else if targetLine >= m.scrollOffset+bodyH {
+		m.scrollOffset = targetLine - bodyH + 1
+		m.cursorLine = bodyH - 1
+	} else {
+		m.cursorLine = targetLine - m.scrollOffset
+	}
+}
+
+func (m *ViewerModel) nextSearchMatch() {
+	if len(m.searchMatches) == 0 {
+		return
+	}
+	m.currentMatch = (m.currentMatch + 1) % len(m.searchMatches)
+	m.jumpToMatch(m.currentMatch)
+}
+
+func (m *ViewerModel) prevSearchMatch() {
+	if len(m.searchMatches) == 0 {
+		return
+	}
+	m.currentMatch = (m.currentMatch - 1 + len(m.searchMatches)) % len(m.searchMatches)
+	m.jumpToMatch(m.currentMatch)
+}
+
 func (m ViewerModel) bodyHeight() int {
-	h := m.height - 4 // header + footer + padding
+	h := m.height - 5 // header + footer + search bar + padding
+	if m.searchMode || m.searchQuery != "" {
+		h--
+	}
 	if h < 3 {
 		h = 3
 	}
@@ -148,10 +382,15 @@ func (m ViewerModel) bodyHeight() int {
 
 func (m ViewerModel) View() string {
 	header := m.renderHeader()
+	searchBar := m.renderSearchBar()
 	body := m.renderBody()
+	scrollBar := m.renderScrollBar()
 	footer := m.renderFooter()
 
-	return lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
+	// Combine body and scroll bar horizontally
+	bodyWithScroll := lipgloss.JoinHorizontal(lipgloss.Top, body, scrollBar)
+
+	return lipgloss.JoinVertical(lipgloss.Left, header, searchBar, bodyWithScroll, footer)
 }
 
 func (m ViewerModel) renderHeader() string {
@@ -164,29 +403,14 @@ func (m ViewerModel) renderHeader() string {
 
 	title := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Blue).Render(m.title)
 
+	// Scroll info
 	right := lipgloss.NewStyle().Foreground(m.theme.Subtext)
-	scroll := right.Render(func() string {
-		if len(m.renderedLines) == 0 {
-			return ""
-		}
-		pct := 0
-		maxScroll := len(m.renderedLines) - m.bodyHeight()
-		if maxScroll > 0 {
-			pct = m.scrollOffset * 100 / maxScroll
-		}
-		if m.scrollOffset == 0 {
-			return "Top"
-		}
-		if m.scrollOffset >= maxScroll {
-			return "End"
-		}
-		return func() string {
-			s := pct
-			return string(rune('0'+s/10%10)) + string(rune('0'+s%10)) + "%"
-		}()
-	}())
+	scrollInfo := m.getScrollInfo()
+	scrollPercent := m.getScrollPercent()
 
-	gap := m.width - lipgloss.Width(m.title) - lipgloss.Width(scroll) - 4
+	scroll := right.Render(fmt.Sprintf("%s (%s)", scrollInfo, scrollPercent))
+
+	gap := m.width - lipgloss.Width(m.title) - lipgloss.Width(scroll) - 8
 	if gap < 1 {
 		gap = 1
 	}
@@ -194,9 +418,36 @@ func (m ViewerModel) renderHeader() string {
 	return style.Render(title + strings.Repeat(" ", gap) + scroll)
 }
 
+func (m ViewerModel) renderSearchBar() string {
+	if !m.searchMode && m.searchQuery == "" {
+		return ""
+	}
+
+	style := lipgloss.NewStyle().
+		Width(m.width).
+		Padding(0, 1)
+
+	promptStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Blue)
+	queryStyle := lipgloss.NewStyle().Foreground(m.theme.Text)
+	matchStyle := lipgloss.NewStyle().Foreground(m.theme.Subtext)
+
+	prompt := "/"
+	query := m.searchQuery
+	if m.searchMode {
+		query += "█" // cursor
+	}
+
+	matchInfo := ""
+	if len(m.searchMatches) > 0 {
+		matchInfo = fmt.Sprintf("  [%d/%d matches]", m.currentMatch+1, len(m.searchMatches))
+	}
+
+	return style.Render(promptStyle.Render(prompt) + queryStyle.Render(query) + matchStyle.Render(matchInfo))
+}
+
 func (m ViewerModel) renderBody() string {
 	bh := m.bodyHeight()
-	padStyle := lipgloss.NewStyle().Padding(0, 2)
+	padStyle := lipgloss.NewStyle().Padding(0, 1)
 
 	if len(m.renderedLines) == 0 {
 		emptyStyle := lipgloss.NewStyle().Foreground(m.theme.Subtext)
@@ -209,10 +460,139 @@ func (m ViewerModel) renderBody() string {
 	}
 	visible := m.renderedLines[m.scrollOffset:end]
 
-	flat := make([]string, bh)
-	copy(flat, visible)
+	// Build lines with line numbers and cursor
+	var displayLines []string
+	lineNumWidth := 4
+	if len(m.renderedLines) > 999 {
+		lineNumWidth = 5
+	}
 
-	return padStyle.Render(strings.Join(flat, "\n"))
+	for i, line := range visible {
+		absLine := m.scrollOffset + i
+		isCursor := i == m.cursorLine
+
+		// Line number
+		lineNum := fmt.Sprintf("%*d", lineNumWidth, absLine+1)
+		lineNumStyle := lipgloss.NewStyle().Foreground(m.theme.Overlay)
+		if isCursor {
+			lineNumStyle = lineNumStyle.Foreground(m.theme.Yellow).Bold(true)
+		}
+
+		// Cursor indicator
+		cursorIndicator := " "
+		if isCursor {
+			cursorIndicator = lipgloss.NewStyle().Foreground(m.theme.Blue).Bold(true).Render("▸")
+		} else {
+			cursorIndicator = " "
+		}
+
+		// Highlight search matches
+		displayLine := line
+		if m.searchQuery != "" && !m.searchMode {
+			query := strings.ToLower(m.searchQuery)
+			if strings.Contains(strings.ToLower(line), query) {
+				// Highlight match (simple highlight - could be enhanced)
+				displayLine = lipgloss.NewStyle().Background(lipgloss.Color("52")).Render(line)
+			}
+		}
+
+		// Assemble line
+		if m.showLineNumbers {
+			displayLines = append(displayLines, cursorIndicator+lineNumStyle.Render(lineNum)+" │ "+displayLine)
+		} else {
+			displayLines = append(displayLines, cursorIndicator+" "+displayLine)
+		}
+	}
+
+	// Pad to fill height
+	for len(displayLines) < bh {
+		displayLines = append(displayLines, "")
+	}
+
+	return padStyle.Render(strings.Join(displayLines, "\n"))
+}
+
+func (m ViewerModel) renderScrollBar() string {
+	if len(m.renderedLines) <= m.bodyHeight() {
+		return ""
+	}
+
+	scrollBarHeight := m.bodyHeight()
+	totalLines := len(m.renderedLines)
+	visibleLines := m.bodyHeight()
+
+	// Calculate thumb position and size
+	thumbPos := 0
+	thumbSize := 1
+	if totalLines > 0 {
+		thumbSize = scrollBarHeight * visibleLines / totalLines
+		if thumbSize < 1 {
+			thumbSize = 1
+		}
+		maxPos := scrollBarHeight - thumbSize
+		if maxPos > 0 {
+			thumbPos = m.scrollOffset * maxPos / (totalLines - visibleLines)
+		}
+	}
+
+	// Render scroll bar
+	var scrollBar []string
+	scrollBarStyle := lipgloss.NewStyle().Foreground(m.theme.Overlay)
+	thumbStyle := lipgloss.NewStyle().Foreground(m.theme.Blue).Bold(true)
+
+	for i := 0; i < scrollBarHeight; i++ {
+		if i >= thumbPos && i < thumbPos+thumbSize {
+			scrollBar = append(scrollBar, thumbStyle.Render("█"))
+		} else {
+			scrollBar = append(scrollBar, scrollBarStyle.Render("│"))
+		}
+	}
+
+	return strings.Join(scrollBar, "\n")
+}
+
+func (m ViewerModel) getScrollInfo() string {
+	if len(m.renderedLines) == 0 {
+		return "0/0"
+	}
+	start := m.scrollOffset + 1
+	end := m.scrollOffset + m.bodyHeight()
+	if end > len(m.renderedLines) {
+		end = len(m.renderedLines)
+	}
+	return fmt.Sprintf("%d-%d/%d", start, end, len(m.renderedLines))
+}
+
+func (m ViewerModel) getScrollPercent() string {
+	if len(m.renderedLines) == 0 {
+		return "0%"
+	}
+	maxScroll := len(m.renderedLines) - m.bodyHeight()
+	if maxScroll <= 0 {
+		return "100%"
+	}
+	pct := m.scrollOffset * 100 / maxScroll
+	return fmt.Sprintf("%d%%", pct)
+}
+
+func (m ViewerModel) renderFooter() string {
+	style := lipgloss.NewStyle().
+		Foreground(m.theme.Subtext).
+		Background(m.theme.Surface).
+		Width(m.width).
+		Padding(0, 1)
+
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Text)
+	descStyle := lipgloss.NewStyle().Foreground(m.theme.Subtext)
+
+	return style.Render(
+		keyStyle.Render("↑↓") + descStyle.Render(" move  ") +
+			keyStyle.Render("PgUp/Dn") + descStyle.Render(" page  ") +
+			keyStyle.Render("g/G") + descStyle.Render(" top/end  ") +
+			keyStyle.Render("/") + descStyle.Render(" search  ") +
+			keyStyle.Render("n/N") + descStyle.Render(" next/prev  ") +
+			keyStyle.Render("F2") + descStyle.Render(" lines  ") +
+			keyStyle.Render("Esc") + descStyle.Render(" back"))
 }
 
 // renderAll converts every raw markdown line into visual terminal lines.
@@ -250,7 +630,7 @@ func (m ViewerModel) renderAll() []string {
 				i++
 			}
 			codeStyle := lipgloss.NewStyle().Background(m.theme.Surface).Foreground(m.theme.Text)
-			w := m.width - 6
+			w := m.width - 8
 			if w < 10 {
 				w = 10
 			}
@@ -279,7 +659,7 @@ func (m ViewerModel) renderAll() []string {
 		if i > start {
 			paraLines := m.lines[start:i]
 			para := strings.Join(paraLines, " ")
-			w := m.width - 6
+			w := m.width - 8
 			if w < 10 {
 				w = 10
 			}
@@ -383,7 +763,7 @@ func (m ViewerModel) renderTableBlock(lines []string) []string {
 		return result
 	}
 
-	w := m.width - 6
+	w := m.width - 8
 	if w < 10 {
 		w = 10
 	}
@@ -521,7 +901,7 @@ func findInlineMatch(s string, codeStyle, boldStyle, linkStyle lipgloss.Style) *
 
 func (m ViewerModel) styleLine(line string) string {
 	trimmed := strings.TrimSpace(line)
-	w := m.width - 6
+	w := m.width - 8
 	if w < 10 {
 		w = 10
 	}
@@ -606,21 +986,4 @@ func (m ViewerModel) renderListItem(marker, content string, width int) string {
 		}
 	}
 	return strings.Join(result, "\n")
-}
-
-func (m ViewerModel) renderFooter() string {
-	style := lipgloss.NewStyle().
-		Foreground(m.theme.Subtext).
-		Background(m.theme.Surface).
-		Width(m.width).
-		Padding(0, 1)
-
-	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Text)
-	descStyle := lipgloss.NewStyle().Foreground(m.theme.Subtext)
-
-	return style.Render(
-		keyStyle.Render("↑↓") + descStyle.Render(" scroll  ") +
-			keyStyle.Render("PgUp/Dn") + descStyle.Render(" page  ") +
-			keyStyle.Render("g/G") + descStyle.Render(" top/end  ") +
-			keyStyle.Render("Esc") + descStyle.Render(" back"))
 }

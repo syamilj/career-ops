@@ -53,6 +53,14 @@ func ParseApplications(careerOpsPath string) []model.CareerApplication {
 		}
 	}
 
+	// Report links in the tracker are written relative to the tracker file's
+	// own directory (e.g. "../reports/..." when the tracker is at data/).
+	// Everything downstream resolves report paths with
+	// filepath.Join(careerOpsPath, ReportPath), so normalize each link to be
+	// relative to careerOpsPath here — otherwise "../reports/..." escapes the
+	// project root and every report read fails (empty enrichment + dead links).
+	trackerDir := filepath.Dir(filePath)
+
 	lines := strings.Split(string(content), "\n")
 	apps := make([]model.CareerApplication, 0)
 	num := 0
@@ -112,7 +120,14 @@ func ParseApplications(careerOpsPath string) []model.CareerApplication {
 		// Parse report link
 		if rm := reReportLink.FindStringSubmatch(fields[7]); rm != nil {
 			app.ReportNumber = rm[1]
-			app.ReportPath = rm[2]
+			// Resolve the link against the tracker's directory, then make it
+			// relative to careerOpsPath so filepath.Join(careerOpsPath, …) works.
+			resolved := filepath.Join(trackerDir, rm[2])
+			if rel, err := filepath.Rel(careerOpsPath, resolved); err == nil {
+				app.ReportPath = rel
+			} else {
+				app.ReportPath = rm[2]
+			}
 		}
 
 		// Notes (field 8 if exists)

@@ -17,18 +17,40 @@ import { readFile, writeFile, stat, copyFile, rm } from 'fs/promises';
 import { resolve, basename, dirname, join } from 'path';
 import { execFileSync } from 'child_process';
 import { existsSync, mkdirSync } from 'fs';
+import { inflateSync } from 'zlib';
+
+// Count /Type /Page objects, inflating FlateDecode streams first
+// (tectonic/xetex emit compressed object streams, so the markers
+// are not visible in the raw bytes).
+function countPdfPages(pdfBuffer) {
+  const countIn = (text) => (text.match(/\/Type\s*\/Page[^s]/g) || []).length;
+  let count = countIn(pdfBuffer.toString('latin1'));
+
+  const raw = pdfBuffer.toString('latin1');
+  const streamRe = /stream\r?\n/g;
+  let m;
+  while ((m = streamRe.exec(raw)) !== null) {
+    const start = m.index + m[0].length;
+    const end = raw.indexOf('endstream', start);
+    if (end === -1) continue;
+    try {
+      const inflated = inflateSync(pdfBuffer.subarray(start, end)).toString('latin1');
+      count += countIn(inflated);
+    } catch { /* not a flate stream (e.g. font data) — skip */ }
+  }
+  return count;
+}
 
 const REQUIRED_SECTIONS = [
-  '\\\\section{Education}',
-  '\\\\section{Work Experience}',
-  '\\\\section{Personal Projects}',
-  '\\\\section{Technical Skills}',
+  '\\\\section\\{Professional Summary\\}',
+  '\\\\section\\{Education\\}',
+  '\\\\section\\{(Professional Experience|Work Experience)\\}',
+  '\\\\section\\{(Additional Information|Technical Skills)\\}',
 ];
 
 const REQUIRED_COMMANDS = [
   '\\\\resumeSubheading',
   '\\\\resumeItem',
-  '\\\\resumeProjectHeading',
 ];
 
 async function main() {
@@ -210,10 +232,16 @@ async function main() {
       }
 
       const pdfStat = await stat(targetPdf);
+      const pdfBuffer = await readFile(targetPdf);
+      const pageCount = countPdfPages(pdfBuffer);
       report.pdf = {
         path: targetPdf,
         sizeKB: parseFloat((pdfStat.size / 1024).toFixed(1)),
+        pageCount,
       };
+      if (pageCount > 1) {
+        report.warning = `ONE-PAGE RULE VIOLATED: PDF has ${pageCount} pages. Condense bullets or trim least-relevant items, then regenerate.`;
+      }
     } catch (err) {
       report.postCompileError = `Failed to finalize PDF: ${err.message}`;
     }

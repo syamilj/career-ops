@@ -186,6 +186,10 @@ async function generatePDF() {
     console.log(`📊 Pages: ${pageCount}`);
     console.log(`📦 Size: ${(pdfBuffer.length / 1024).toFixed(1)} KB`);
 
+    if (pageCount > 1) {
+      console.warn(`⚠️  ONE-PAGE RULE VIOLATED: PDF has ${pageCount} pages. Condense bullets or trim least-relevant items, then regenerate. Do NOT shrink fonts/margins below template values.`);
+    }
+
     return { outputPath, pageCount, size: pdfBuffer.length };
   } finally {
     await browser.close();
