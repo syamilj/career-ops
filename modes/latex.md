@@ -14,9 +14,10 @@ Export a tailored, ATS-optimized CV as a `.tex` file and compile it to PDF via `
 8. Select top 3-4 most relevant projects for the offer
 9. Reorder experience bullets by JD relevance
 10. Inject keywords naturally into existing achievements
-11. Generate the `.tex` file using `templates/cv-template.tex`
-12. Write to `output/cv-{candidate}-{company}-{YYYY-MM-DD}.tex`
+11. Build a JSON payload (see schema below) and write to `/tmp/cv-{candidate}-{company}.json`
+12. Run: `node build-cv-latex.mjs /tmp/cv-{candidate}-{company}.json output/cv-{candidate}-{company}-{YYYY-MM-DD}.tex`
 13. Run: `node generate-latex.mjs output/cv-{candidate}-{company}-{YYYY-MM-DD}.tex output/cv-{candidate}-{company}-{YYYY-MM-DD}.pdf`
+    *(Replace `{candidate}`, `{company}`, `{YYYY-MM-DD}` with actual values.)*
 14. **Check page count (MANDATORY):** the JSON report includes `pdf.pageCount`. If > 1, condense content (fewer bullets per older role, trim least-relevant items) and recompile until exactly 1 page. NEVER shrink fonts or margins to force a fit.
 15. Report: .tex path, .pdf path, file sizes, page count, section count, keyword coverage %
 
@@ -29,82 +30,87 @@ The compiled PDF MUST be exactly 1 page, matching the design in `templates/cv-ex
 
 **Requires:** `tectonic` (preferred — `brew install tectonic`, auto-downloads packages) or `pdflatex` (MiKTeX / TeX Live) on PATH.
 
-## Template Placeholders
+## JSON Input Schema
 
-The template at `templates/cv-template.tex` uses `{{PLACEHOLDER}}` syntax:
+Write a JSON file with this structure. `build-cv-latex.mjs` handles template merge and LaTeX escaping — no need to escape special characters yourself.
 
-| Placeholder | Source |
-|-------------|--------|
-| `{{NAME}}` | `profile.yml → candidate.full_name` |
-| `{{LOCATION}}` | City, Country from profile.yml (e.g. `Jakarta, Indonesia`) |
-| `{{EMAIL_URL}}` | Raw email for `mailto:` URL — must not be LaTeX-escaped (from profile.yml) |
-| `{{EMAIL_DISPLAY}}` | Escaped email for display text — LaTeX-special chars like `_` must be escaped, e.g. `first\_name@example.com` |
-| `{{PHONE_URL}}` | Phone for `tel:` URL — digits and leading `+` only, NO spaces/dashes (e.g. `+6285161112223`) |
-| `{{PHONE_DISPLAY}}` | Phone display text (may contain spaces) |
-| `{{LINKEDIN_URL}}` | Full URL with scheme for `\href{}`: e.g. `https://linkedin.com/in/username`. If `profile.yml` stores a bare host+path (no scheme), prepend `https://` before substitution. |
-| `{{LINKEDIN_DISPLAY}}` | Display text only (no scheme): `linkedin.com/in/username` |
-| `{{GITHUB_URL}}` | Full URL with scheme for `\href{}`: e.g. `https://github.com/username`. If `profile.yml` stores a bare host+path, prepend `https://`. |
-| `{{GITHUB_DISPLAY}}` | Display text only (no scheme): `github.com/username` |
-| `{{SUMMARY}}` | Personalized Professional Summary with JD keywords (escaped, italic in template) |
-| `{{EDUCATION}}` | LaTeX `\resumeSubheading` blocks from cv.md Education section |
-| `{{EXPERIENCE}}` | LaTeX `\resumeSubheading` + `\resumeItem` blocks — reordered bullets |
-| `{{AWARDS}}` | `\item` lines from cv.md Honors & Awards (inside Additional Information) |
-| `{{CERTIFICATIONS}}` | `\item` lines: languages + certifications (inside Additional Information) |
-| `{{SKILLS}}` | `\item` lines from cv.md Technical Skills (inside Additional Information) |
-
-**Section order in template (matches `cv-example.jpg`):** Header → Professional Summary → Education → Professional Experience → Additional Information (Awards, Languages & Certifications, Technical Skills).
-
-## LaTeX Content Generation Rules
-
-### Education
-
-Each entry becomes:
-
-```latex
-    \resumeSubheading
-    {Institution}{City, State}
-    {Degree}{Date Range}
+```json
+{
+  "name": "Jane Smith",
+  "contact_line": "San Francisco, CA | +1 415 555 0100",
+  "email": { "url": "jane@example.com", "display": "jane@example.com" },
+  "linkedin": { "url": "https://linkedin.com/in/janesmith", "display": "linkedin.com/in/janesmith" },
+  "github": { "url": "https://github.com/janesmith", "display": "github.com/janesmith" },
+  "education": [
+    {
+      "institution": "University Name",
+      "location": "City, State",
+      "degree": "Bachelor of Science in Computer Science",
+      "dates": "2018 - 2022",
+      "coursework": ["Data Structures", "Algorithms", "Machine Learning"]
+    }
+  ],
+  "experience": [
+    {
+      "company": "Company Name",
+      "role": "Job Title",
+      "location": "Remote",
+      "dates": "June 2022 - Present",
+      "bullets": [
+        "Achievement bullet with JD keywords injected",
+        "Another bullet with quantified impact"
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "Project Name",
+      "context": "Tech stack summary for the project line",
+      "dates": "",
+      "bullets": [
+        "What you built and what it does"
+      ]
+    }
+  ],
+  "skills": [
+    { "category": "Languages", "items": "Python, JavaScript, C++" },
+    { "category": "Frameworks", "items": "FastAPI, React, PyTorch" }
+  ]
+}
 ```
 
-If coursework exists, add:
+### Field reference
 
-```latex
-        \resumeItemListStart
-            \resumeItem{\textbf{Coursework:} Course1, Course2, ...}
-        \resumeItemListEnd
-```
+| Field | Type | Source |
+|-------|------|--------|
+| `name` | string | `profile.yml → candidate.full_name` |
+| `contact_line` | string | Phone / City, State / Visa — built from profile.yml |
+| `email.url` | string | Email for `\href{mailto:...}` (sanitized via sanitizeUrl, not LaTeX-escaped) |
+| `email.display` | string | Display text for the email link |
+| `linkedin.url` | string | Full URL with scheme for `\href{}` (sanitized via sanitizeUrl, not LaTeX-escaped) |
+| `linkedin.display` | string | Display text only (no scheme) |
+| `github.url` | string | Full URL with scheme for `\href{}` (sanitized via sanitizeUrl, not LaTeX-escaped) |
+| `github.display` | string | Display text only (no scheme) |
+| `education[].institution` | string | From cv.md Education |
+| `education[].location` | string | Institution location |
+| `education[].degree` | string | Degree name |
+| `education[].dates` | string | Date range |
+| `education[].coursework` | string[] | Optional — generates a coursework line if present |
+| `experience[].company` | string | From cv.md Experience |
+| `experience[].role` | string | Job title |
+| `experience[].location` | string | Work location |
+| `experience[].dates` | string | Date range |
+| `experience[].bullets` | string[] | Reordered and keyword-injected achievement bullets |
+| `projects[].name` | string | From cv.md Projects |
+| `projects[].context` | string | Tech stack — appears next to project name |
+| `projects[].dates` | string | Date range (or empty) |
+| `projects[].bullets` | string[] | Selected project achievements |
+| `skills[].category` | string | Skill category name (e.g. "Languages", "Frameworks") |
+| `skills[].items` | string | Comma-separated skills in that category |
 
-### Experience
+## LaTeX Escaping (handled by the script)
 
-Each role becomes:
-
-```latex
-    \resumeSubheading
-      {Company}{Date Range}
-      {Role Title}{Location}
-      \resumeItemListStart
-        \resumeItem{Bullet text with JD keywords injected}
-        ...
-      \resumeItemListEnd
-```
-
-### Additional Information (Awards / Certifications / Skills)
-
-Each line becomes a plain `\item`:
-
-```latex
-    \item 1st Place — National Business Plan Competition: BUMDes Incubation Model (270+ teams, Nov 2021).
-```
-
-For skills, group inline on one or two `\item` lines to save vertical space:
-
-```latex
-    \item \textbf{Excel:} Advanced (Pivot Tables, XLOOKUP, INDEX/MATCH, macros). \textbf{Statistical:} EViews, STATA, SPSS. \textbf{Programming:} Python (Pandas, NumPy), SQL.
-```
-
-## LaTeX Escaping (CRITICAL)
-
-All text content MUST be escaped for LaTeX before insertion:
+`build-cv-latex.mjs` automatically escapes all user-supplied text before insertion:
 
 | Character | Escape |
 |-----------|--------|
@@ -121,17 +127,12 @@ All text content MUST be escaped for LaTeX before insertion:
 | `±` | `$\pm$` |
 | `→` | `$\rightarrow$` |
 
-**Exception:** Do NOT escape LaTeX commands themselves (`\resumeItem`, `\textbf`, etc.) — only user-supplied text content.
-
-**Exception for URLs:** Do NOT escape text inside `\href{URL}{...}` first arguments. The URL must remain raw (or RFC 3986 percent-encoded). Only escape the *display text* (second argument). For example:
-```latex
-\href{https://example.com/path_with_underscores}{Example\_Display}
-```
+**Exception:** URLs inside `\href{}` are NOT escaped by the LaTeX escaper, but `sanitizeUrl()` still validates the scheme (mailto/http/https) and removes dangerous characters to prevent injection.
 
 ## ATS Rules (same as pdf mode)
 
 - Single-column layout (enforced by template)
-- Standard section headers: Professional Summary, Education, Professional Experience, Additional Information
+- Standard section headers: Education, Work Experience, Personal Projects, Technical Skills
 - UTF-8, machine-readable via `\pdfgentounicode=1`
 - Keywords distributed: first bullet of each role, skills section
 - No images, no graphics, no color in body text

@@ -2,7 +2,6 @@ package data
 
 import (
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,29 +14,36 @@ import (
 )
 
 var (
-	reReportLink = regexp.MustCompile(`\[(\d+)\]\(([^)]+)\)`)
-	reScoreValue = regexp.MustCompile(`(\d+\.?\d*)/5`)
-	// Spanish patterns (legacy)
+	reReportLink     = regexp.MustCompile(`\[(\d+)\]\(([^)]+)\)`)
+	reScoreValue     = regexp.MustCompile(`(\d+\.?\d*)/5`)
 	reArchetype      = regexp.MustCompile(`(?i)\*\*Arquetipo(?:\s+detectado)?\*\*\s*\|\s*(.+)`)
+	reTlDr           = regexp.MustCompile(`(?i)\*\*TL;DR\*\*\s*\|\s*(.+)`)
+	reTlDrColon      = regexp.MustCompile(`(?i)\*\*TL;DR:\*\*\s*(.+)`)
+	reRemote         = regexp.MustCompile(`(?i)\*\*Remote\*\*\s*\|\s*(.+)`)
+	reComp           = regexp.MustCompile(`(?i)\*\*Comp\*\*\s*\|\s*(.+)`)
 	reArchetypeColon = regexp.MustCompile(`(?i)\*\*Arquetipo:\*\*\s*(.+)`)
-	// English patterns (also match Spanish as fallback)
-	reArchetypeEN      = regexp.MustCompile(`(?i)\*\*Archetype\*\*\s*\|\s*(.+)`)
-	reArchetypeColonEN = regexp.MustCompile(`(?i)\*\*Archetype:\*\*\s*(.+)`)
-	reTlDr             = regexp.MustCompile(`(?i)\*\*TL;DR\*\*\s*\|\s*(.+)`)
-	reTlDrColon        = regexp.MustCompile(`(?i)\*\*TL;DR:\*\*\s*(.+)`)
-	reRemote           = regexp.MustCompile(`(?i)\*\*Remote\*\*\s*\|\s*(.+)`)
-	reComp             = regexp.MustCompile(`(?i)\*\*Comp\*\*\s*\|\s*(.+)`)
-	reCompTable        = regexp.MustCompile(`(?im)^\|\s*\*\*([^*]+)\*\*\s*\|\s*([^\|]*?(?:Rp\s*\d|IDR\s*\d|USD\s*\d|SGD\s*\d|S\$|RM\s*\d|€\s*\d|£\s*\d|\$\s*\d)[^\|]*?)\s*\|`)
-	reCompSentence     = regexp.MustCompile(`(?i)(?:compensation|salary|pay|gaji|comp(?:ensation)? is|is|falls in the)\s*[^|;]{0,80}?(Rp\s*\d[\d–-–\s,\.]*m(?:/month)?|IDR\s*\d[\d–-–\s,\.]*m(?:/month)?|SGD\s*\d[\d,\.]*k|USD\s*\d[\d,\.]*k|S\$\s*\d[\d,\.]*k|RM\s*\d[\d,\.]*k|€\s*\d[\d,\.]*k|£\s*\d[\d,\.]*k|\$\s*\d[\d,\.]*k)`)
-	rePosition         = regexp.MustCompile(`(?im)(?:\*\*Position\*\*\s*\|\s*(.+)|\*\*Level detected:\*\*\s*(.+)|\*\*Level:\*\*\s*(.+))`)
-	reDomain           = regexp.MustCompile(`(?i)\*\*Domain\*\*\s*\|\s*(.+)`)
-	reSeniority        = regexp.MustCompile(`(?i)\*\*Seniority\*\*\s*\|\s*(.+)`)
-	reDomainColon      = regexp.MustCompile(`(?i)\*\*Domain:\*\*\s*(.+)`)
-	reSeniorityColon   = regexp.MustCompile(`(?i)\*\*Seniority:\*\*\s*(.+)`)
-	reReportURL        = regexp.MustCompile(`(?m)^\*\*URL:\*\*\s*(https?://\S+)`)
-	reBatchID          = regexp.MustCompile(`(?m)^\*\*Batch ID:\*\*\s*(\d+)`)
-	reNotesURL         = regexp.MustCompile(`https?://[^\s|]+`)
+	reReportURL      = regexp.MustCompile(`(?m)^\*\*URL:\*\*\s*(https?://\S+)`)
+	reBatchID        = regexp.MustCompile(`(?m)^\*\*Batch ID:\*\*\s*(\d+)`)
 )
+
+// resolveReportPath converts a report link from the tracker into a path
+// relative to careerOpsPath. Links are normally relative to the tracker
+// file's own directory (see merge-tracker.mjs link normalization, #760);
+// legacy trackers may still carry root-relative links, so fall back to the
+// raw link when the tracker-relative resolution does not exist on disk.
+func resolveReportPath(careerOpsPath, trackerPath, link string) string {
+	resolved := filepath.Join(filepath.Dir(trackerPath), link)
+	if _, err := os.Stat(resolved); err != nil {
+		legacy := filepath.Join(careerOpsPath, link)
+		if _, err2 := os.Stat(legacy); err2 == nil {
+			resolved = legacy
+		}
+	}
+	if rel, err := filepath.Rel(careerOpsPath, resolved); err == nil {
+		return rel
+	}
+	return link
+}
 
 // ParseApplications reads applications.md and returns parsed applications.
 // It tries both {path}/applications.md and {path}/data/applications.md for compatibility.
@@ -52,14 +58,6 @@ func ParseApplications(careerOpsPath string) []model.CareerApplication {
 			return nil
 		}
 	}
-
-	// Report links in the tracker are written relative to the tracker file's
-	// own directory (e.g. "../reports/..." when the tracker is at data/).
-	// Everything downstream resolves report paths with
-	// filepath.Join(careerOpsPath, ReportPath), so normalize each link to be
-	// relative to careerOpsPath here — otherwise "../reports/..." escapes the
-	// project root and every report read fails (empty enrichment + dead links).
-	trackerDir := filepath.Dir(filePath)
 
 	lines := strings.Split(string(content), "\n")
 	apps := make([]model.CareerApplication, 0)
@@ -117,17 +115,15 @@ func ParseApplications(careerOpsPath string) []model.CareerApplication {
 			app.Score, _ = strconv.ParseFloat(sm[1], 64)
 		}
 
-		// Parse report link
+		// Parse report link. Tracker links are written relative to the
+		// tracker file itself (e.g. ../reports/... when the tracker lives in
+		// data/), so resolve against the tracker's directory and normalize
+		// back to a careerOpsPath-relative path, which is what every
+		// consumer joins against. Legacy root-relative links are kept as a
+		// fallback when the resolved file does not exist.
 		if rm := reReportLink.FindStringSubmatch(fields[7]); rm != nil {
 			app.ReportNumber = rm[1]
-			// Resolve the link against the tracker's directory, then make it
-			// relative to careerOpsPath so filepath.Join(careerOpsPath, …) works.
-			resolved := filepath.Join(trackerDir, rm[2])
-			if rel, err := filepath.Rel(careerOpsPath, resolved); err == nil {
-				app.ReportPath = rel
-			} else {
-				app.ReportPath = rm[2]
-			}
+			app.ReportPath = resolveReportPath(careerOpsPath, filePath, rm[2])
 		}
 
 		// Notes (field 8 if exists)
@@ -135,30 +131,8 @@ func ParseApplications(careerOpsPath string) []model.CareerApplication {
 			app.Notes = fields[8]
 		}
 
-		// Tier 0: a URL embedded in Notes wins (used by quick-add `n` entries
-		// that have no report yet).
-		if m := reNotesURL.FindString(app.Notes); m != "" {
-			app.JobURL = strings.TrimRight(m, ".,;)")
-		}
-
-		// Parse Notes to extract remote/location/comp when report isn't loaded yet.
-		// Format: "{type}, {location}, {comp}. {extra}"
-		if app.Notes != "" {
-			notesParts := strings.Split(app.Notes, ",")
-			if len(notesParts) >= 1 {
-				app.Remote = strings.TrimSpace(notesParts[0])
-			}
-			if len(notesParts) >= 2 {
-				app.Location = strings.TrimSpace(notesParts[1])
-			}
-			if len(notesParts) >= 3 {
-				c := strings.TrimSpace(notesParts[2])
-				if idx := strings.Index(c, "."); idx > 0 {
-					c = c[:idx]
-				}
-				app.CompEstimate = c
-			}
-		}
+		// Lift location / work mode / pay / last-contact out of the notes free-text
+		deriveNoteFields(&app)
 
 		apps = append(apps, app)
 	}
@@ -173,7 +147,7 @@ func ParseApplications(careerOpsPath string) []model.CareerApplication {
 	reportNumURLs := loadJobURLs(careerOpsPath)
 
 	for i := range apps {
-		if apps[i].JobURL != "" || apps[i].ReportPath == "" {
+		if apps[i].ReportPath == "" {
 			continue
 		}
 		fullReport := filepath.Join(careerOpsPath, apps[i].ReportPath)
@@ -557,7 +531,7 @@ func NormalizeStatus(raw string) string {
 }
 
 // LoadReportSummary extracts key fields from a report file.
-func LoadReportSummary(careerOpsPath, reportPath string) (archetype, tldr, remote, comp, domain, seniority string) {
+func LoadReportSummary(careerOpsPath, reportPath string) (archetype, tldr, remote, comp string) {
 	fullPath := filepath.Join(careerOpsPath, reportPath)
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
@@ -565,12 +539,7 @@ func LoadReportSummary(careerOpsPath, reportPath string) (archetype, tldr, remot
 	}
 	text := string(content)
 
-	// Try English patterns first, then Spanish (legacy)
-	if m := reArchetypeEN.FindStringSubmatch(text); m != nil {
-		archetype = cleanTableCell(m[1])
-	} else if m := reArchetypeColonEN.FindStringSubmatch(text); m != nil {
-		archetype = cleanTableCell(m[1])
-	} else if m := reArchetype.FindStringSubmatch(text); m != nil {
+	if m := reArchetype.FindStringSubmatch(text); m != nil {
 		archetype = cleanTableCell(m[1])
 	} else if m := reArchetypeColon.FindStringSubmatch(text); m != nil {
 		archetype = cleanTableCell(m[1])
@@ -589,38 +558,6 @@ func LoadReportSummary(careerOpsPath, reportPath string) (archetype, tldr, remot
 
 	if m := reComp.FindStringSubmatch(text); m != nil {
 		comp = cleanTableCell(m[1])
-	}
-	if comp == "" {
-		if m := reCompTable.FindStringSubmatch(text); m != nil && isCompRow(m[1], m[2]) {
-			comp = compactComp(cleanTableCell(m[2]))
-		}
-	}
-	if comp == "" {
-		if m := reCompSentence.FindStringSubmatch(text); m != nil {
-			comp = compactComp(m[1])
-		}
-	}
-
-	if m := rePosition.FindStringSubmatch(text); m != nil {
-		for i := 1; i < len(m); i++ {
-			if v := cleanTableCell(m[i]); v != "" {
-				seniority = v
-				break
-			}
-		}
-	}
-	if seniority == "" {
-		if m := reSeniority.FindStringSubmatch(text); m != nil {
-			seniority = cleanTableCell(m[1])
-		} else if m := reSeniorityColon.FindStringSubmatch(text); m != nil {
-			seniority = cleanTableCell(m[1])
-		}
-	}
-
-	if m := reDomain.FindStringSubmatch(text); m != nil {
-		domain = cleanTableCell(m[1])
-	} else if m := reDomainColon.FindStringSubmatch(text); m != nil {
-		domain = cleanTableCell(m[1])
 	}
 
 	// Truncate long fields
@@ -666,213 +603,6 @@ func UpdateApplicationStatus(careerOpsPath string, app model.CareerApplication, 
 	return os.WriteFile(filePath, []byte(strings.Join(lines, "\n")), 0644)
 }
 
-// AddApplication appends a minimal new row to applications.md (quick-add `n`).
-// Only the URL is required; company is derived from the URL host when empty.
-// The URL is stored in Notes so Tier-0 enrichment picks it up without a report.
-func AddApplication(careerOpsPath, jobURL, company, role string) (int, error) {
-	if !strings.HasPrefix(jobURL, "http://") && !strings.HasPrefix(jobURL, "https://") {
-		return 0, fmt.Errorf("URL must start with http:// or https://")
-	}
-
-	filePath := filepath.Join(careerOpsPath, "applications.md")
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		filePath = filepath.Join(careerOpsPath, "data", "applications.md")
-		content, err = os.ReadFile(filePath)
-		if err != nil {
-			return 0, fmt.Errorf("applications.md not found: %w", err)
-		}
-	}
-
-	text := string(content)
-
-	// Duplicate guard: same URL already tracked.
-	if strings.Contains(text, jobURL) {
-		return 0, fmt.Errorf("URL already tracked")
-	}
-
-	// Next number = max existing + 1.
-	maxNum := 0
-	for _, line := range strings.Split(text, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, "|") || strings.HasPrefix(trimmed, "|-") || strings.HasPrefix(trimmed, "| #") {
-			continue
-		}
-		fields := strings.SplitN(strings.Trim(trimmed, "|"), "|", 2)
-		if len(fields) == 0 {
-			continue
-		}
-		if n, err := strconv.Atoi(strings.TrimSpace(fields[0])); err == nil && n > maxNum {
-			maxNum = n
-		}
-	}
-	num := maxNum + 1
-
-	if company == "" {
-		company = companyFromURL(jobURL)
-	}
-	if role == "" {
-		role = "-"
-	}
-
-	today := time.Now().Format("2006-01-02")
-	row := fmt.Sprintf("| %d | %s | %s | %s | - | Evaluated | ❌ |  | %s |",
-		num, today, company, role, jobURL)
-
-	if !strings.HasSuffix(text, "\n") {
-		text += "\n"
-	}
-	text += row + "\n"
-
-	return num, os.WriteFile(filePath, []byte(text), 0o644)
-}
-
-// companyFromURL derives a readable company name from a job posting URL host,
-// e.g. "careers.goto.com" -> "Goto", "jobs.lever.co/stripe/..." -> "Stripe".
-func companyFromURL(rawURL string) string {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return "?"
-	}
-	host := strings.TrimPrefix(parsed.Hostname(), "www.")
-
-	// ATS platforms: company slug lives in the path, not the host.
-	atsHosts := map[string]bool{
-		"boards.greenhouse.io": true, "jobs.lever.co": true,
-		"jobs.ashbyhq.com": true, "apply.workable.com": true,
-		"jobs.smartrecruiters.com": true, "wellfound.com": true,
-	}
-	if atsHosts[parsed.Hostname()] || atsHosts[host] {
-		segs := strings.Split(strings.Trim(parsed.Path, "/"), "/")
-		if len(segs) > 0 && segs[0] != "" {
-			return titleCaseSlug(segs[0])
-		}
-	}
-
-	// Otherwise: strip common job-board prefixes and TLD.
-	for _, prefix := range []string{"careers.", "jobs.", "career.", "apply.", "join.", "work."} {
-		host = strings.TrimPrefix(host, prefix)
-	}
-	parts := strings.Split(host, ".")
-	if len(parts) > 0 {
-		return titleCaseSlug(parts[0])
-	}
-	return "?"
-}
-
-func titleCaseSlug(s string) string {
-	s = strings.NewReplacer("-", " ", "_", " ").Replace(s)
-	words := strings.Fields(s)
-	for i, w := range words {
-		if len(w) > 0 {
-			words[i] = strings.ToUpper(w[:1]) + w[1:]
-		}
-	}
-	return strings.Join(words, " ")
-}
-
-// UpdateJobURL writes or updates the **URL:** field in the application's report
-// file. Reports are the Tier-1 source for job URL enrichment, so editing there
-// keeps the dashboard consistent with the data contract.
-func UpdateJobURL(careerOpsPath string, app model.CareerApplication, newURL string) error {
-	if app.ReportPath == "" {
-		return fmt.Errorf("no report file for %s — cannot store URL", app.Company)
-	}
-	if !strings.HasPrefix(newURL, "http://") && !strings.HasPrefix(newURL, "https://") {
-		return fmt.Errorf("URL must start with http:// or https://")
-	}
-
-	fullPath := filepath.Join(careerOpsPath, app.ReportPath)
-	content, err := os.ReadFile(fullPath)
-	if err != nil {
-		return fmt.Errorf("cannot read report: %w", err)
-	}
-
-	lines := strings.Split(string(content), "\n")
-
-	// Replace existing **URL:** line if present.
-	for i, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "**URL:**") {
-			lines[i] = "**URL:** " + newURL
-			return os.WriteFile(fullPath, []byte(strings.Join(lines, "\n")), 0o644)
-		}
-	}
-
-	// Insert after **Score:** line, or after the first heading as fallback.
-	insertAt := -1
-	for i, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "**Score:**") {
-			insertAt = i + 1
-			break
-		}
-	}
-	if insertAt == -1 {
-		for i, line := range lines {
-			if strings.HasPrefix(line, "#") {
-				insertAt = i + 1
-				break
-			}
-		}
-	}
-	if insertAt == -1 {
-		insertAt = 0
-	}
-
-	urlLine := "**URL:** " + newURL
-	lines = append(lines[:insertAt], append([]string{urlLine}, lines[insertAt:]...)...)
-	return os.WriteFile(fullPath, []byte(strings.Join(lines, "\n")), 0o644)
-}
-
-// UpdateApplicationNotes updates the Notes column of an application row in
-// applications.md, matched by report number (same strategy as status updates).
-func UpdateApplicationNotes(careerOpsPath string, app model.CareerApplication, newNotes string) error {
-	filePath := filepath.Join(careerOpsPath, "applications.md")
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		filePath = filepath.Join(careerOpsPath, "data", "applications.md")
-		content, err = os.ReadFile(filePath)
-		if err != nil {
-			return err
-		}
-	}
-
-	newNotes = strings.NewReplacer("|", "/", "\n", " ", "\t", " ").Replace(newNotes)
-
-	lines := strings.Split(string(content), "\n")
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, "|") {
-			continue
-		}
-		if app.ReportNumber == "" || !strings.Contains(line, fmt.Sprintf("[%s]", app.ReportNumber)) {
-			continue
-		}
-		if strings.Contains(line, "\t") {
-			parts := strings.Split(line, "\t")
-			if len(parts) < 9 {
-				return fmt.Errorf("unexpected tracker row format")
-			}
-			// Preserve a trailing "|" if the original notes cell had one.
-			suffix := ""
-			if strings.HasSuffix(strings.TrimSpace(parts[8]), "|") {
-				suffix = " |"
-			}
-			parts[8] = newNotes + suffix
-			lines[i] = strings.Join(parts, "\t")
-		} else {
-			parts := strings.Split(line, "|")
-			// parts: ["", " # ", ..., " notes ", ""] — notes is index 9 in a 9-col table
-			if len(parts) < 11 {
-				return fmt.Errorf("unexpected tracker row format")
-			}
-			parts[9] = " " + newNotes + " "
-			lines[i] = strings.Join(parts, "|")
-		}
-		return os.WriteFile(filePath, []byte(strings.Join(lines, "\n")), 0o644)
-	}
-	return fmt.Errorf("application not found: report %s", app.ReportNumber)
-}
-
 // replaceStatusInLine replaces the old status with new status in a table line.
 func replaceStatusInLine(line, oldStatus, newStatus string) string {
 	// Case-insensitive replacement of the status field
@@ -884,44 +614,6 @@ func cleanTableCell(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.TrimRight(s, "|")
 	return strings.TrimSpace(s)
-}
-
-func isCompRow(label, value string) bool {
-	label = strings.ToLower(label)
-	value = strings.ToLower(value)
-	for _, key := range []string{"comp", "salary", "pay", "target range", "sgd equivalent",
-		"consultant", "analyst", "associate", "trainee", "officer", "first-year", "graduate"} {
-		if strings.Contains(label, key) {
-			return true
-		}
-	}
-	// Accept if value contains a salary pattern (Rp/IDR/SGD/USD + number)
-	salaryPatterns := []string{"rp ", "idr ", "sgd ", "usd ", "s$", "rm ", "€", "£", "$"}
-	for _, p := range salaryPatterns {
-		if strings.Contains(value, p) {
-			return true
-		}
-	}
-	return strings.Contains(value, "glassdoor") || strings.Contains(value, "jobstreet") || strings.Contains(value, "payscale")
-}
-
-func compactComp(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
-	}
-	// Extract just the salary range part (e.g. "Rp 8–12M/month" from "Rp 7–12M/month | Glassdoor")
-	if idx := strings.IndexAny(s, "|;"); idx > 0 {
-		s = strings.TrimSpace(s[:idx])
-	}
-	// Remove trailing source info like "(Glassdoor)" or "| Glassdoor"
-	if idx := strings.Index(s, "("); idx > 0 {
-		s = strings.TrimSpace(s[:idx])
-	}
-	if len([]rune(s)) > 16 {
-		s = string([]rune(s)[:13]) + "..."
-	}
-	return s
 }
 
 // StatusPriority returns the sort priority for a status (lower = higher priority).

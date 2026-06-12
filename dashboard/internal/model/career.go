@@ -14,18 +14,18 @@ type CareerApplication struct {
 	ReportNumber string
 	Notes        string
 	JobURL       string // URL of the original job posting
-	// Parsed from Notes (always available)
-	Remote       string // On-site, Hybrid, Remote, Internship, Contract
-	Location     string // Country/city from notes
-	CompEstimate string // Salary estimate from notes
+	// Derived from Notes free-text (see data.deriveNoteFields)
+	Location    string  // "City, ST" when a US city+state appears in the notes
+	WorkMode    string  // "Remote" | "Hybrid" | "Full" (onsite), "" when unknown
+	PayRange    string  // first $-range found in the notes, e.g. "$140-210K"
+	PayMax      float64 // top of PayRange in dollars (sort key), 0 when unknown
+	PaySource   string  // "POSTED" when the JD listed it, "est" for estimates, "" unknown
+	LastContact string  // max YYYY-MM-DD found in notes (falls back to applied date)
 	// Enrichment (lazy loaded from report)
-	Archetype string
-	TlDr      string
-	Domain    string // Industry domain from report
-	Seniority string // Level from report
-	// Liveness (populated from cache / background checks)
-	Liveness       string // "", "checking", "active", "expired", "uncertain", "error"
-	LivenessReason string
+	Archetype    string
+	TlDr         string
+	Remote       string
+	CompEstimate string
 }
 
 // PipelineMetrics holds aggregate stats for the pipeline dashboard.
