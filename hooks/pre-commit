@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+# pre-commit — block commits that change tracker rows without bumping `Last Upd`.
+# Delegates the diff to check-tracker-updates.mjs (one source of truth) and
+# exits 1 if any row was edited without a bump. The commit message hints the
+# user to `node update-tracker.mjs <num> --bump` to fix.
+#
+# Resolved via `git rev-parse --show-toplevel` so the hook works regardless of
+# where git invokes it from (the relative path inside .git/hooks/ is fragile).
+
+node "$(git rev-parse --show-toplevel)/check-tracker-updates.mjs" --staged

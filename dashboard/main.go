@@ -106,8 +106,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case screens.PipelineLoadReportMsg:
-		archetype, tldr, remote, comp, domain, seniority := data.LoadReportSummary(msg.CareerOpsPath, msg.ReportPath)
-		m.layout.Pipeline().EnrichReport(msg.ReportPath, archetype, tldr, remote, comp, domain, seniority)
+		archetype, tldr, remote, comp, domain, seniority, lastUpdated := data.LoadReportSummary(msg.CareerOpsPath, msg.ReportPath)
+		m.layout.Pipeline().EnrichReport(msg.ReportPath, archetype, tldr, remote, comp, domain, seniority, lastUpdated)
 		return m, nil
 
 	case screens.PipelineUpdateStatusMsg:
@@ -116,6 +116,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Log the error but still reload data to keep UI consistent
 			fmt.Fprintf(os.Stderr, "WARN: status update failed: %v\n", err)
 		}
+		// Invalidate the report cache so "Last Upd" column re-reads the
+		// bumped `**Last Updated:**` line from the report file.
+		m.layout.Pipeline().InvalidateReportCache(msg.App.ReportPath)
 		m.reloadPipelineData()
 		return m, nil
 
@@ -140,6 +143,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.layout.SetStatusMsg("URL update failed: " + err.Error())
 			return m, nil
 		}
+		m.layout.Pipeline().InvalidateReportCache(msg.App.ReportPath)
 		m.reloadPipelineData()
 		m.layout.SetStatusMsg("URL saved to " + msg.App.ReportPath)
 		// Old URL's liveness no longer applies; check the new one.
@@ -150,6 +154,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.layout.SetStatusMsg("notes update failed: " + err.Error())
 			return m, nil
 		}
+		m.layout.Pipeline().InvalidateReportCache(msg.App.ReportPath)
 		m.reloadPipelineData()
 		m.layout.SetStatusMsg("notes updated")
 		return m, nil
@@ -280,9 +285,9 @@ func main() {
 		if app.ReportPath == "" {
 			continue
 		}
-		archetype, tldr, remote, comp, domain, seniority := data.LoadReportSummary(careerOpsPath, app.ReportPath)
-		if archetype != "" || tldr != "" || remote != "" || comp != "" || domain != "" || seniority != "" {
-			layout.Pipeline().EnrichReport(app.ReportPath, archetype, tldr, remote, comp, domain, seniority)
+		archetype, tldr, remote, comp, domain, seniority, lastUpdated := data.LoadReportSummary(careerOpsPath, app.ReportPath)
+		if archetype != "" || tldr != "" || remote != "" || comp != "" || domain != "" || seniority != "" || lastUpdated != "" {
+			layout.Pipeline().EnrichReport(app.ReportPath, archetype, tldr, remote, comp, domain, seniority, lastUpdated)
 		}
 	}
 

@@ -28,8 +28,8 @@ func main() {
 
 	for _, app := range apps {
 		if app.ReportPath != "" {
-			archetype, tldr, remote, comp, domain, seniority := data.LoadReportSummary(careerOpsPath, app.ReportPath)
-			layout.Pipeline().EnrichReport(app.ReportPath, archetype, tldr, remote, comp, domain, seniority)
+			archetype, tldr, remote, comp, domain, seniority, lastUpdated := data.LoadReportSummary(careerOpsPath, app.ReportPath)
+			layout.Pipeline().EnrichReport(app.ReportPath, archetype, tldr, remote, comp, domain, seniority, lastUpdated)
 		}
 	}
 

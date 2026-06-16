@@ -452,13 +452,16 @@ function parseScore(s) {
 
 function parseAppLine(line) {
   const parts = line.split('|').map(s => s.trim());
-  if (parts.length < 9) return null;
+  if (parts.length < 10) return null;
   const num = parseInt(parts[1]);
   if (isNaN(num) || num === 0) return null;
+  // Tracker schema (v2 with Last Upd): # | Date | Company | Role | Score | Status | Last Upd | PDF | Report | Notes
+  // parts[7] is Last Upd; if missing (legacy 9-col row), fall back to Date.
   return {
     num, date: parts[2], company: parts[3], role: parts[4],
-    score: parts[5], status: parts[6], pdf: parts[7], report: parts[8],
-    notes: parts[9] || '', raw: line,
+    score: parts[5], status: parts[6], lastUpd: parts[7] || parts[2],
+    pdf: parts[8] || '—', report: parts[9] || '—',
+    notes: parts[10] || '', raw: line,
   };
 }
 
@@ -586,7 +589,7 @@ const existingApps = [];
 let maxNum = 0;
 
 for (const line of appLines) {
-  if (line.startsWith('|') && !line.includes('---') && !line.includes('Empresa')) {
+  if (line.trimStart().startsWith('|') && !line.includes('---') && !line.includes('Empresa')) {
     const app = parseAppLine(line);
     if (app) {
       existingApps.push(app);
@@ -677,7 +680,8 @@ for (const file of tsvFiles) {
       console.log(`🔄 Update: #${duplicate.num} ${addition.company} — ${addition.role} (${oldScore}→${newScore})`);
       const lineIdx = appLines.indexOf(duplicate.raw);
       if (lineIdx >= 0) {
-        const updatedLine = `| ${duplicate.num} | ${addition.date} | ${addition.company} | ${addition.role} | ${addition.score} | ${duplicate.status} | ${duplicate.pdf} | ${addition.report} | Re-eval ${addition.date} (${oldScore}→${newScore}). ${addition.notes} |`;
+        const today = new Date().toISOString().slice(0, 10);
+        const updatedLine = `| ${duplicate.num} | ${addition.date} | ${addition.company} | ${addition.role} | ${addition.score} | ${duplicate.status} | ${today} | ${duplicate.pdf} | ${addition.report} | Re-eval ${addition.date} (${oldScore}→${newScore}). ${addition.notes} |`;
         appLines[lineIdx] = updatedLine;
         updated++;
       }
@@ -689,8 +693,9 @@ for (const file of tsvFiles) {
     // New entry — use the number from the TSV
     const entryNum = addition.num > maxNum ? addition.num : ++maxNum;
     if (addition.num > maxNum) maxNum = addition.num;
+    const today = new Date().toISOString().slice(0, 10);
 
-    const newLine = `| ${entryNum} | ${addition.date} | ${addition.company} | ${addition.role} | ${addition.score} | ${addition.status} | ${addition.pdf} | ${addition.report} | ${addition.notes} |`;
+    const newLine = `| ${entryNum} | ${addition.date} | ${addition.company} | ${addition.role} | ${addition.score} | ${addition.status} | ${today} | ${addition.pdf} | ${addition.report} | ${addition.notes} |`;
     newLines.push(newLine);
     added++;
     console.log(`➕ Add #${entryNum}: ${addition.company} — ${addition.role} (${addition.score})`);

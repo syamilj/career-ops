@@ -15,7 +15,9 @@ import (
 // show Location / Pay / Last-contact columns without a tracker schema change.
 var (
 	// $-amounts, optionally a range: "$140-210K", "$174,986-209,983", "~$124.2-198.7K"
-	reMoneySpan = regexp.MustCompile(`~?\$\d[\d,]*(?:\.\d+)?[KkMm]?(?:\s*[-–]\s*\$?\d[\d,]*(?:\.\d+)?[KkMm]?)?`)
+	// IDR/Rp amounts: "Rp7M", "Rp 7-12M", "IDR 10.93M", "IDR 1,641,975,464" — see
+	// TestDeriveNoteFields "IDR range" and "Rp single amount" for fixture coverage.
+	reMoneySpan = regexp.MustCompile(`~?(?:\$|Rp\.?\s?|IDR\s?)\d[\d,]*(?:\.\d+)?[KkMm]?(?:\s*[-–]\s*(?:\$|Rp\.?\s?|IDR\s?)?\d[\d,]*(?:\.\d+)?[KkMm]?)?`)
 	// ISO dates embedded in notes ("Rejected 2026-06-04", "viewed 2026-06-04")
 	reISODate = regexp.MustCompile(`\b20\d{2}-\d{2}-\d{2}\b`)
 	// "City ST" / "City, ST" with a strict two-letter US state code so prose like

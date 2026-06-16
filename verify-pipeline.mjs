@@ -70,15 +70,17 @@ const lines = content.split('\n');
 
 const entries = [];
 for (const line of lines) {
-  if (!line.startsWith('|')) continue;
+  if (!line.trimStart().startsWith('|')) continue;
   const parts = line.split('|').map(s => s.trim());
-  if (parts.length < 9) continue;
+  if (parts.length < 10) continue;
   const num = parseInt(parts[1]);
   if (isNaN(num)) continue;
+  // Tracker schema v2: # | Date | Company | Role | Score | Status | Last Upd | PDF | Report | Notes
   entries.push({
     num, date: parts[2], company: parts[3], role: parts[4],
-    score: parts[5], status: parts[6], pdf: parts[7], report: parts[8],
-    notes: parts[9] || '',
+    score: parts[5], status: parts[6], lastUpd: parts[7] || parts[2],
+    pdf: parts[8] || '—', report: parts[9] || '—',
+    notes: parts[10] || '',
   });
 }
 
@@ -159,11 +161,11 @@ if (badScores === 0) ok('All scores valid');
 // --- Check 5: Row format ---
 let badRows = 0;
 for (const line of lines) {
-  if (!line.startsWith('|')) continue;
+  if (!line.trimStart().startsWith('|')) continue;
   if (line.includes('---') || line.includes('Empresa')) continue;
   const parts = line.split('|');
-  if (parts.length < 9) {
-    error(`Row with <9 columns: ${line.substring(0, 80)}...`);
+  if (parts.length < 11) {
+    error(`Row with <11 columns (expected 10 data + 2 empty): ${line.substring(0, 80)}...`);
     badRows++;
   }
 }

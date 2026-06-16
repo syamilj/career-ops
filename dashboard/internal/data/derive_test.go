@@ -104,6 +104,55 @@ func TestDeriveNoteFields(t *testing.T) {
 			workMode: "",
 			last:     "2026-06-01",
 		},
+		{
+			name: "IDR range with tilde estimate",
+			app: model.CareerApplication{
+				Date:  "2026-06-12",
+				Role:  "Strategy Associate",
+				Notes: "Jakarta. F&B startup. Best match! Target range Rp 7-10M/month (est)",
+			},
+			location: "",
+			workMode: "",
+			payRange: "Rp 7-10M",
+			paySrc:   "est",
+			last:     "2026-06-12",
+		},
+		{
+			name: "Rp single amount no space, POSTED",
+			app: model.CareerApplication{
+				Date:  "2026-06-10",
+				Notes: "Singapore. PE direct. Comp Rp17M base + bonus (POSTED). Phone screen DONE 2026-06-11",
+			},
+			location: "",
+			workMode: "",
+			payRange: "Rp17M",
+			paySrc:   "POSTED",
+			last:     "2026-06-11",
+		},
+		{
+			name: "IDR decimal M amount",
+			app: model.CareerApplication{
+				Date:  "2026-06-09",
+				Notes: "Jakarta. FMCG management trainee. IDR 10.6M (est). Applied 2026-06-09",
+			},
+			location: "",
+			workMode: "",
+			payRange: "IDR 10.6M",
+			paySrc:   "est",
+			last:     "2026-06-09",
+		},
+		{
+			name: "IDR full number no M suffix",
+			app: model.CareerApplication{
+				Date:  "2026-06-08",
+				Notes: "Jakarta. Senior strategy. Annual IDR 1,641,975,464 (POSTED)",
+			},
+			location: "",
+			workMode: "",
+			payRange: "IDR 1,641,975,464",
+			paySrc:   "POSTED",
+			last:     "2026-06-08",
+		},
 	}
 
 	for _, tc := range cases {
@@ -133,12 +182,16 @@ func TestDeriveNoteFields(t *testing.T) {
 
 func TestPayCeiling(t *testing.T) {
 	cases := map[string]float64{
-		"$140-210K":        210_000,
-		"$174,986-209,983": 209_983,
-		"~$124.2-198.7K":   198_700,
-		"$170K":            170_000,
-		"$95-159K":         159_000,
-		"":                 0,
+		"$140-210K":            210_000,
+		"$174,986-209,983":     209_983,
+		"~$124.2-198.7K":       198_700,
+		"$170K":                170_000,
+		"$95-159K":             159_000,
+		"Rp 7-10M":             10_000_000,
+		"Rp17M":                17_000_000,
+		"IDR 10.6M":            10_600_000,
+		"IDR 1,641,975,464":    1_641_975_464,
+		"":                     0,
 	}
 	for span, want := range cases {
 		if got := payCeiling(span); got != want {

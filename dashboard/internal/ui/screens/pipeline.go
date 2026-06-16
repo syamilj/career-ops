@@ -89,12 +89,13 @@ type PipelineAddEntryMsg struct {
 type PipelineOpenProgressMsg struct{}
 
 type reportSummary struct {
-	archetype string
-	tldr      string
-	remote    string
-	comp      string
-	domain    string
-	seniority string
+	archetype   string
+	tldr        string
+	remote      string
+	comp        string
+	domain      string
+	seniority   string
+	lastUpdated string // ISO date (YYYY-MM-DD) from **Last Updated:** or file mtime
 }
 
 // Sort modes
@@ -241,15 +242,27 @@ func (m *PipelineModel) CopyReportCache(other *PipelineModel) {
 }
 
 // EnrichReport caches report summary data for preview.
-func (m *PipelineModel) EnrichReport(reportPath, archetype, tldr, remote, comp, domain, seniority string) {
+func (m *PipelineModel) EnrichReport(reportPath, archetype, tldr, remote, comp, domain, seniority, lastUpdated string) {
 	m.reportCache[reportPath] = reportSummary{
-		archetype: archetype,
-		tldr:      tldr,
-		remote:    remote,
-		comp:      comp,
-		domain:    domain,
-		seniority: seniority,
+		archetype:   archetype,
+		tldr:        tldr,
+		remote:      remote,
+		comp:        comp,
+		domain:      domain,
+		seniority:   seniority,
+		lastUpdated: lastUpdated,
 	}
+}
+
+// InvalidateReportCache drops the cached report summary for one report so the
+// next render re-reads it from disk. Called after status/notes/URL updates so
+// the dashboard's "Last Upd" column reflects the new `**Last Updated:**` line
+// instead of the stale cached value.
+func (m *PipelineModel) InvalidateReportCache(reportPath string) {
+	if reportPath == "" {
+		return
+	}
+	delete(m.reportCache, reportPath)
 }
 
 // WithReloadedData rebuilds the pipeline with fresh tracker data while preserving
@@ -1175,7 +1188,7 @@ func columnDefs() []colW {
 		// Core columns
 		{"Live", 4, 50}, {"Status", 9, 55}, {"Date", 8, 68}, {"Gaji", 14, 82}, {"Vrdct", 6, 98},
 		// Medium (wide terminals)
-		{"Loc", 9, 115}, {"Level", 8, 130}, {"Type", 10, 145},
+		{"Loc", 9, 115}, {"Level", 8, 130}, {"Last Upd", 10, 145},
 		// Extra (very wide terminals only)
 		{"Domain", 9, 165}, {"Exp", 3, 185},
 	}
@@ -1668,20 +1681,34 @@ func (m PipelineModel) renderAppLine(app model.CareerApplication, selected bool,
 
 	// ── Parse all data sources ──────────────────────────────────
 	nRemote, nLocation, nComp := parseNotes(app.Notes)
-	typeText, remoteText, compText, domainText, seniorityText := "", "", "", "", ""
+	remoteText, compText, domainText, seniorityText, lastUpdText := "", "", "", "", ""
 	if s, ok := m.reportCache[app.ReportPath]; ok {
-		typeText = s.archetype
 		remoteText = s.remote
 		compText = s.comp
 		domainText = s.domain
 		seniorityText = s.seniority
+		lastUpdText = s.lastUpdated
 	}
 	if remoteText == "" {
 		remoteText = nRemote
 	}
+	// Comp priority: report's **Comp** > deriveNoteFields PayRange (regex-matched)
+	// > parseNotes 3rd-comma fallback. The PayRange branch is what makes IDR/Rp
+	// amounts in the notes column render correctly when the report has no
+	// **Comp** header line.
 	if compText == "" {
-		compText = nComp
+		if app.PayRange != "" {
+			compText = app.PayRange
+			if app.PaySource == "POSTED" {
+				compText = compText + " (POSTED)"
+			} else if app.PaySource == "est" {
+				compText = compText + " (est)"
+			}
+		} else {
+			compText = nComp
+		}
 	}
+	lastUpdRender, lastUpdStyle := renderLastUpd(lastUpdText)
 
 	// Extract location from remoteText if it contains a comma (e.g. "On-site, Singapore")
 	rLoc := nLocation
@@ -1762,7 +1789,7 @@ func (m PipelineModel) renderAppLine(app model.CareerApplication, selected bool,
 		{verdictIcon(app.Score), green, 6, 98},
 		{rLoc, sub, 9, 115},
 		{seniorityText, mauve, 8, 130},
-		{typeText, mauve, 10, 145},
+		{lastUpdRender, lastUpdStyle, 10, 145},
 		{domainText, mauve, 9, 165},
 		{m.expLabel(app), blue, 3, 185},
 	}
@@ -1817,7 +1844,16 @@ func (m PipelineModel) renderExpandedDetails(app model.CareerApplication) []stri
 		}
 	}
 	if compText == "" {
-		compText = nComp
+		if app.PayRange != "" {
+			compText = app.PayRange
+			if app.PaySource == "POSTED" {
+				compText = compText + " (POSTED)"
+			} else if app.PaySource == "est" {
+				compText = compText + " (est)"
+			}
+		} else {
+			compText = nComp
+		}
 	}
 	if locText == "" && strings.Contains(remoteText, ",") {
 		parts := strings.SplitN(remoteText, ",", 2)
@@ -1843,11 +1879,11 @@ func (m PipelineModel) renderExpandedDetails(app model.CareerApplication) []stri
 		detailLines = append(detailLines, strings.Join(row1, "  │  "))
 	}
 
-	// Row 2: Type | Domain | Level
+	// Row 2: Last Upd | Domain | Level
 	row2 := []string{}
 	if s, ok := m.reportCache[app.ReportPath]; ok {
-		if s.archetype != "" {
-			row2 = append(row2, labelStyle.Render("Type: ")+valueStyle.Render(s.archetype))
+		if s.lastUpdated != "" {
+			row2 = append(row2, labelStyle.Render("Last Upd: ")+valueStyle.Render(formatTimeAgo(s.lastUpdated)))
 		}
 		if s.domain != "" {
 			row2 = append(row2, labelStyle.Render("Domain: ")+valueStyle.Render(s.domain))
@@ -1930,6 +1966,85 @@ func shortDate(d string) string {
 		return "-"
 	}
 	return d
+}
+
+// formatTimeAgo renders an ISO date (YYYY-MM-DD) as a compact relative
+// time string: "0h ago" / "3h ago" (same day), "3d ago" (this week),
+// "2w ago" (this month), "5mo ago" (this year), "1y ago" (older).
+// Non-date inputs (e.g. "—" or empty) pass through untouched so callers
+// can use a single helper for both real and missing values.
+func formatTimeAgo(iso string) string {
+	if iso == "" || iso == "—" {
+		return "—"
+	}
+	// Accept both date-only ("2026-06-16") and RFC3339 ("2026-06-16T14:32:00+07:00").
+	// Date-only is treated as midnight LOCAL; RFC3339 is a real timestamp.
+	var t time.Time
+	if tt, err := time.Parse(time.RFC3339, iso); err == nil {
+		t = tt
+	} else if tt, err := time.ParseInLocation("2006-01-02", iso, time.Local); err == nil {
+		t = tt
+	} else {
+		return iso
+	}
+	now := time.Now()
+	if t.After(now) {
+		return "0h ago"
+	}
+	d := now.Sub(t)
+	h := int(d.Hours())
+	if h < 1 {
+		mins := int(d.Minutes())
+		if mins < 1 {
+			return "now"
+		}
+		return fmt.Sprintf("%dm ago", mins)
+	}
+	if h < 24 && t.YearDay() == now.YearDay() && t.Year() == now.Year() {
+		return fmt.Sprintf("%dh ago", h)
+	}
+	days := int(d.Hours() / 24)
+	switch {
+	case days < 7:
+		return fmt.Sprintf("%dd ago", days)
+	case days < 30:
+		return fmt.Sprintf("%dw ago", days/7)
+	case days < 365:
+		return fmt.Sprintf("%dmo ago", days/30)
+	default:
+		return fmt.Sprintf("%dy ago", days/365)
+	}
+}
+
+// renderLastUpd returns the display text and a lipgloss style for the
+// "Last Upd" column. Color encodes recency: green ≤7d (recent), yellow
+// ≤30d (stale), dim >30d (ancient), and dim for missing values.
+func renderLastUpd(iso string) (string, lipgloss.Style) {
+	plain := lipgloss.NewStyle()
+	if iso == "" {
+		return "—", plain.Faint(true)
+	}
+	var t time.Time
+	if tt, err := time.Parse(time.RFC3339, iso); err == nil {
+		t = tt
+	} else if tt, err := time.ParseInLocation("2006-01-02", iso, time.Local); err == nil {
+		t = tt
+	} else {
+		return iso, plain
+	}
+	days := int(time.Since(t).Hours() / 24)
+	if days < 0 {
+		days = 0
+	}
+	text := formatTimeAgo(iso)
+	switch {
+	case days <= 7:
+		return text, lipgloss.NewStyle().Foreground(lipgloss.Color("2")) // green
+	case days <= 30:
+		return text, lipgloss.NewStyle().Foreground(lipgloss.Color("3")) // yellow
+	default:
+		return text, plain.Faint(true)
+	}
 }
 func rptLabel(n string) string {
 	if n != "" {
@@ -2100,7 +2215,16 @@ func (m PipelineModel) renderPreview() string {
 		}
 	}
 	if compText == "" {
-		compText = nComp
+		if app.PayRange != "" {
+			compText = app.PayRange
+			if app.PaySource == "POSTED" {
+				compText = compText + " (POSTED)"
+			} else if app.PaySource == "est" {
+				compText = compText + " (est)"
+			}
+		} else {
+			compText = nComp
+		}
 	}
 	if locText == "" && strings.Contains(remoteText, ",") {
 		parts2 := strings.SplitN(remoteText, ",", 2)
@@ -2126,11 +2250,11 @@ func (m PipelineModel) renderPreview() string {
 	}
 	infoLine := strings.Join(infoParts, "  ")
 
-	// Line 4: Enhanced type + domain + level with better formatting
+	// Line 4: Enhanced last-updated + domain + level with better formatting
 	extraParts := []string{}
 	if s, ok := m.reportCache[app.ReportPath]; ok {
-		if s.archetype != "" {
-			extraParts = append(extraParts, dim.Render("Type: ")+mauve.Render(s.archetype))
+		if s.lastUpdated != "" {
+			extraParts = append(extraParts, dim.Render("Last Upd: ")+mauve.Render(formatTimeAgo(s.lastUpdated)))
 		}
 		if s.domain != "" {
 			extraParts = append(extraParts, dim.Render("Domain: ")+mauve.Render(s.domain))
@@ -2480,7 +2604,7 @@ func daysSince(dateStr string) string {
 	if len(d) == 8 && d[2] == '-' {
 		d = "20" + d
 	}
-	t, err := time.Parse("2006-01-02", d)
+	t, err := time.ParseInLocation("2006-01-02", d, time.Local)
 	if err != nil {
 		return ""
 	}

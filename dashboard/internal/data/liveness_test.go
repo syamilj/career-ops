@@ -127,7 +127,7 @@ func TestAddApplication(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "data"), 0o755)
 	tracker := filepath.Join(dir, "data", "applications.md")
-	os.WriteFile(tracker, []byte("# Applications Tracker\n\n| # | Date | Company | Role | Score | Status | PDF | Report | Notes |\n|---|------|---------|------|-------|--------|-----|--------|-------|\n| 41 | 2026-06-01 | Acme | Analyst | 4.0/5 | Applied | ✅ | [041](reports/041-acme-2026-06-01.md) | On-site, Jakarta, Rp10M |\n"), 0o644)
+	os.WriteFile(tracker, []byte("# Applications Tracker\n\n| # | Date | Company | Role | Score | Status | Last Upd | PDF | Report | Notes |\n|---|------|---------|------|-------|--------|----------|-----|--------|-------|\n| 41 | 2026-06-01 | Acme | Analyst | 4.0/5 | Applied | 2026-06-01 | ✅ | [041](reports/041-acme-2026-06-01.md) | On-site, Jakarta, Rp10M |\n"), 0o644)
 
 	num, err := AddApplication(dir, "https://careers.goto.com/job/99", "", "")
 	if err != nil {

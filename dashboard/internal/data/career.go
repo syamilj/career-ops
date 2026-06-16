@@ -29,6 +29,10 @@ var (
 	reSeniority      = regexp.MustCompile(`(?i)\*\*Seniority\*\*\s*\|\s*(.+)`)
 	reDomainColon    = regexp.MustCompile(`(?i)\*\*Domain:\*\*\s*(.+)`)
 	reSeniorityColon = regexp.MustCompile(`(?i)\*\*Seniority:\*\*\s*(.+)`)
+	// "**Last Updated:** 2026-06-16" — optional one-line change summary follows the date.
+	// Used by the dashboard "Last Upd" column to show report freshness. Falls back to
+	// report file mtime when the field is absent.
+	reLastUpdated = regexp.MustCompile(`(?m)^\*\*Last Updated:\*\*\s*(\d{4}-\d{2}-\d{2})`)
 )
 
 // resolveReportPath converts a report link from the tracker into a path
@@ -96,7 +100,7 @@ func ParseApplications(careerOpsPath string) []model.CareerApplication {
 			}
 		}
 
-		if len(fields) < 8 {
+		if len(fields) < 10 {
 			continue
 		}
 
@@ -106,12 +110,13 @@ func ParseApplications(careerOpsPath string) []model.CareerApplication {
 			trackerNumber = parsedNumber
 		}
 		app := model.CareerApplication{
-			Number:  trackerNumber,
-			Date:    fields[1],
-			Company: fields[2],
-			Role:    fields[3],
-			Status:  fields[5],
-			HasPDF:  strings.Contains(fields[6], "\u2705"),
+			Number:    trackerNumber,
+			Date:      fields[1],
+			Company:   fields[2],
+			Role:      fields[3],
+			Status:    fields[5],
+			LastUpd:   fields[6],
+			HasPDF:    strings.Contains(fields[7], "✅"),
 		}
 
 		// Parse score (field 4 = Score column)
@@ -126,14 +131,14 @@ func ParseApplications(careerOpsPath string) []model.CareerApplication {
 		// back to a careerOpsPath-relative path, which is what every
 		// consumer joins against. Legacy root-relative links are kept as a
 		// fallback when the resolved file does not exist.
-		if rm := reReportLink.FindStringSubmatch(fields[7]); rm != nil {
+		if rm := reReportLink.FindStringSubmatch(fields[8]); rm != nil {
 			app.ReportNumber = rm[1]
 			app.ReportPath = resolveReportPath(careerOpsPath, filePath, rm[2])
 		}
 
-		// Notes (field 8 if exists)
-		if len(fields) > 8 {
-			app.Notes = fields[8]
+		// Notes (field 9 if exists)
+		if len(fields) > 9 {
+			app.Notes = fields[9]
 		}
 
 		// Lift location / work mode / pay / last-contact out of the notes free-text
@@ -536,8 +541,12 @@ func NormalizeStatus(raw string) string {
 }
 
 // LoadReportSummary extracts key fields from a report file.
-func LoadReportSummary(careerOpsPath, reportPath string) (archetype, tldr, remote, comp, domain, seniority string) {
+// lastUpdated is the ISO date (YYYY-MM-DD) from the "**Last Updated:**" line
+// when present, else the report file's mtime formatted as YYYY-MM-DD. Returns
+// "" if the report file cannot be read.
+func LoadReportSummary(careerOpsPath, reportPath string) (archetype, tldr, remote, comp, domain, seniority, lastUpdated string) {
 	fullPath := filepath.Join(careerOpsPath, reportPath)
+	info, statErr := os.Stat(fullPath)
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
 		return
@@ -582,6 +591,26 @@ func LoadReportSummary(careerOpsPath, reportPath string) (archetype, tldr, remot
 		tldr = tldr[:117] + "..."
 	}
 
+	// Last-updated: prefer the explicit "**Last Updated:** YYYY-MM-DD" line so
+	// the dashboard can show the date the report was last reviewed, not just
+	// the file mtime (which can change for unrelated reasons like formatter
+	// runs). The line is date-only, so for the dashboard's "Xh ago" column
+	// to be accurate we still need a real timestamp — fall back to mtime when
+	// the report was clearly just written (mtime within the last 24h on the
+	// same day as the explicit date), otherwise use the explicit date string.
+	if m := reLastUpdated.FindStringSubmatch(text); m != nil && statErr == nil {
+		lastUpdated = m[1]
+		// If the explicit date matches today (or yesterday's late write) and
+		// mtime is recent, the user almost certainly bumped this row moments
+		// ago — use mtime so the "Xh ago" column shows a real number.
+		mt := info.ModTime()
+		if mt.After(time.Now().Add(-24 * time.Hour)) {
+			lastUpdated = mt.Format(time.RFC3339)
+		}
+	} else if statErr == nil {
+		lastUpdated = info.ModTime().Format(time.RFC3339)
+	}
+
 	return
 }
 
@@ -617,7 +646,16 @@ func UpdateApplicationStatus(careerOpsPath string, app model.CareerApplication, 
 		return fmt.Errorf("application not found: report %s", app.ReportNumber)
 	}
 
-	return os.WriteFile(filePath, []byte(strings.Join(lines, "\n")), 0644)
+	if err := os.WriteFile(filePath, []byte(strings.Join(lines, "\n")), 0644); err != nil {
+		return err
+	}
+	// Auto-bump Last Upd on the tracker row + report's **Last Updated:** line
+	// so the dashboard's "Last Upd" column reflects the change immediately.
+	today := todayISO()
+	if err := bumpTrackerLastUpd(careerOpsPath, app.ReportNumber, today); err != nil {
+		return err
+	}
+	return bumpReportLastUpdated(careerOpsPath, app.ReportPath, today)
 }
 
 // AddApplication creates a new tracker entry for a job URL.
@@ -668,8 +706,8 @@ func AddApplication(careerOpsPath, jobURL, company, role string) (int, error) {
 	}
 
 	today := time.Now().Format("2006-01-02")
-	row := fmt.Sprintf("| %d | %s | %s | %s | - | Evaluated | ❌ |  | %s |",
-		num, today, company, role, jobURL)
+	row := fmt.Sprintf("| %d | %s | %s | %s | - | Evaluated | %s | ❌ |  | %s |",
+		num, today, company, role, today, jobURL)
 
 	if !strings.HasSuffix(text, "\n") {
 		text += "\n"
@@ -720,6 +758,98 @@ func titleCaseSlug(s string) string {
 	return strings.Join(words, " ")
 }
 
+// todayISO returns today's date as YYYY-MM-DD in the local timezone.
+func todayISO() string {
+	return time.Now().Format("2006-01-02")
+}
+
+// bumpTrackerLastUpd updates the Last Upd column (parts[7]) of the tracker
+// row matching reportNumber to today. Used by the dashboard's status/notes
+// commands so the row's freshness stays accurate without a separate CLI step.
+func bumpTrackerLastUpd(careerOpsPath, reportNumber, today string) error {
+	if reportNumber == "" {
+		return nil
+	}
+	filePath := filepath.Join(careerOpsPath, "applications.md")
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		filePath = filepath.Join(careerOpsPath, "data", "applications.md")
+		content, err = os.ReadFile(filePath)
+		if err != nil {
+			return err
+		}
+	}
+	lines := strings.Split(string(content), "\n")
+	needle := fmt.Sprintf("[%s]", reportNumber)
+	bumped := false
+	for i, line := range lines {
+		if !strings.HasPrefix(strings.TrimSpace(line), "|") {
+			continue
+		}
+		if !strings.Contains(line, needle) {
+			continue
+		}
+		parts := strings.Split(line, "|")
+		// Schema v2: # | Date | Company | Role | Score | Status | Last Upd | PDF | Report | Notes
+		// parts has 12 cells: ["", " # ", " date ", " co ", " role ", " sc ", " st ", " LU ", " pdf ", " rep ", " notes ", ""]
+		if len(parts) < 9 {
+			continue
+		}
+		parts[7] = " " + today + " "
+		lines[i] = strings.Join(parts, "|")
+		bumped = true
+		break
+	}
+	if !bumped {
+		return nil
+	}
+	return os.WriteFile(filePath, []byte(strings.Join(lines, "\n")), 0o644)
+}
+
+// bumpReportLastUpdated updates the `**Last Updated:** YYYY-MM-DD` line in the
+// report file to today. If the line is absent it is inserted after the
+// `**Score:**` line (or after the first heading as a fallback). No-op when
+// ReportPath is empty.
+func bumpReportLastUpdated(careerOpsPath, reportPath, today string) error {
+	if reportPath == "" {
+		return nil
+	}
+	fullPath := filepath.Join(careerOpsPath, reportPath)
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(content), "\n")
+	newLine := "**Last Updated:** " + today
+	for i, line := range lines {
+		if reLastUpdated.MatchString(line) {
+			lines[i] = newLine
+			return os.WriteFile(fullPath, []byte(strings.Join(lines, "\n")), 0o644)
+		}
+	}
+	// Insert after **Score:** or first heading.
+	insertAt := -1
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "**Score:**") {
+			insertAt = i + 1
+			break
+		}
+	}
+	if insertAt == -1 {
+		for i, line := range lines {
+			if strings.HasPrefix(line, "#") {
+				insertAt = i + 1
+				break
+			}
+		}
+	}
+	if insertAt == -1 {
+		insertAt = 0
+	}
+	lines = append(lines[:insertAt], append([]string{newLine}, lines[insertAt:]...)...)
+	return os.WriteFile(fullPath, []byte(strings.Join(lines, "\n")), 0o644)
+}
+
 // UpdateJobURL writes a new job URL into the report file's **URL:** line.
 func UpdateJobURL(careerOpsPath string, app model.CareerApplication, newURL string) error {
 	if app.ReportPath == "" {
@@ -767,7 +897,12 @@ func UpdateJobURL(careerOpsPath string, app model.CareerApplication, newURL stri
 
 	urlLine := "**URL:** " + newURL
 	lines = append(lines[:insertAt], append([]string{urlLine}, lines[insertAt:]...)...)
-	return os.WriteFile(fullPath, []byte(strings.Join(lines, "\n")), 0o644)
+	if err := os.WriteFile(fullPath, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
+		return err
+	}
+	// Auto-bump the report's **Last Updated:** so the dashboard's "Last Upd"
+	// column reflects the URL change without a manual re-eval.
+	return bumpReportLastUpdated(careerOpsPath, app.ReportPath, todayISO())
 }
 
 // UpdateApplicationNotes updates the Notes column of an application row in
@@ -813,7 +948,16 @@ func UpdateApplicationNotes(careerOpsPath string, app model.CareerApplication, n
 			parts[9] = " " + newNotes + " "
 			lines[i] = strings.Join(parts, "|")
 		}
-		return os.WriteFile(filePath, []byte(strings.Join(lines, "\n")), 0o644)
+		if err := os.WriteFile(filePath, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
+			return err
+		}
+		// Auto-bump Last Upd on the tracker row + report's **Last Updated:**
+		// line so the dashboard's "Last Upd" column reflects the change.
+		today := todayISO()
+		if err := bumpTrackerLastUpd(careerOpsPath, app.ReportNumber, today); err != nil {
+			return err
+		}
+		return bumpReportLastUpdated(careerOpsPath, app.ReportPath, today)
 	}
 	return fmt.Errorf("application not found: report %s", app.ReportNumber)
 }

@@ -67,6 +67,10 @@ AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluat
 | `scan.mjs` | Zero-token portal scanner — hits Greenhouse/Ashby/Lever APIs directly, zero LLM cost |
 | `check-liveness.mjs` | Job posting liveness checker |
 | `liveness-core.mjs` | Shared liveness logic (expired signals win over generic Apply text) |
+| `update-tracker.mjs` | CLI to update a tracker row (status/URL/note/score) and auto-bump `Last Upd` |
+| `check-tracker-updates.mjs` | Pre-commit hook logic — blocks commits that edit rows without bumping `Last Upd` |
+| `install-hooks.mjs` | Install git hooks from `hooks/` to `.git/hooks/` (idempotent) |
+| `migrate-add-last-upd.mjs` | One-time migration — adds `Last Upd` column to existing trackers (idempotent) |
 | `reports/` | Evaluation reports (format: `{###}-{company-slug}-{YYYY-MM-DD}.md`). Blocks A-F + G (Posting Legitimacy). Header includes `**Legitimacy:** {tier}`. |
 
 ### First Run — Onboarding (IMPORTANT)
@@ -116,9 +120,11 @@ If `data/applications.md` doesn't exist, create it:
 ```markdown
 # Applications Tracker
 
-| # | Date | Company | Role | Score | Status | PDF | Report | Notes |
-|---|------|---------|------|-------|--------|-----|--------|-------|
+| # | Date | Company | Role | Score | Status | Last Upd | PDF | Report | Notes |
+|---|------|---------|------|-------|--------|----------|-----|--------|-------|
 ```
+
+The `Last Upd` column tracks when a row was last touched (not when it was first evaluated — that's `Date`). It auto-updates whenever you change a row's status, URL, or notes via `update-tracker.mjs` (see Pipeline Integrity below).
 
 #### Step 5: Get to know the user (important for quality)
 
@@ -319,12 +325,13 @@ Write one TSV file per evaluation to `batch/tracker-additions/{num}-{company-slu
 ### Pipeline Integrity
 
 1. **NEVER edit applications.md to ADD new entries** -- Write TSV in `batch/tracker-additions/` and `merge-tracker.mjs` handles the merge.
-2. **YES you can edit applications.md to UPDATE status/notes of existing entries.**
-3. All reports MUST include `**URL:**` in the header (between Score and PDF). Include `**Legitimacy:** {tier}` (see Block G in `modes/oferta.md`).
-4. All statuses MUST be canonical (see `templates/states.yml`).
-5. Health check: `node verify-pipeline.mjs`
-6. Normalize statuses: `node normalize-statuses.mjs`
-7. Dedup: `node dedup-tracker.mjs`
+2. **Use `node update-tracker.mjs <num> --status|--note|--url|--score|--bump` to change a row** — this is the supported way to UPDATE status/URL/notes/score on an existing entry. It auto-stamps the `Last Upd` column to today's date so the row's freshness stays accurate.
+3. **A pre-commit hook (`hooks/pre-commit`, installed via `node install-hooks.mjs`) blocks commits** that change a row's content (status/notes/score/etc.) without bumping `Last Upd`. The fix is `node update-tracker.mjs <num> --bump`.
+4. All reports MUST include `**URL:**` in the header (between Score and PDF). Include `**Legitimacy:** {tier}` (see Block G in `modes/oferta.md`).
+5. All statuses MUST be canonical (see `templates/states.yml`).
+6. Health check: `node verify-pipeline.mjs`
+7. Normalize statuses: `node normalize-statuses.mjs`
+8. Dedup: `node dedup-tracker.mjs`
 
 ### Canonical States (applications.md)
 

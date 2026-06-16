@@ -7,6 +7,7 @@ type CareerApplication struct {
 	Company      string
 	Role         string
 	Status       string
+	LastUpd      string // ISO date (YYYY-MM-DD) of last tracker-row update
 	Score        float64
 	ScoreRaw     string
 	HasPDF       bool

@@ -15,10 +15,10 @@ func TestParseApplicationsUsesTrackerNumberColumn(t *testing.T) {
 
 	applications := `# Applications Tracker
 
-| # | Date | Company | Role | Score | Status | PDF | Report | Notes |
-|---|------|---------|------|-------|--------|-----|--------|-------|
-| 140 | 2026-04-16 | Arize AI | AI Engineer, Instrumentation | 4.7/5 | Evaluated | ✅ | [140](reports/140-arize-ai-engineer-instrumentation-2026-04-16.md) | Strong fit |
-| 143 | 2026-04-16 | Arize AI | AI Sales Engineer, US | 4.1/5 | Evaluated | ❌ | [143](reports/143-arize-ai-sales-engineer-us-2026-04-16.md) | Good fit |
+| # | Date | Company | Role | Score | Status | Last Upd | PDF | Report | Notes |
+|---|------|---------|------|-------|--------|----------|-----|--------|-------|
+| 140 | 2026-04-16 | Arize AI | AI Engineer, Instrumentation | 4.7/5 | Evaluated | 2026-04-16 | ✅ | [140](reports/140-arize-ai-engineer-instrumentation-2026-04-16.md) | Strong fit |
+| 143 | 2026-04-16 | Arize AI | AI Sales Engineer, US | 4.1/5 | Evaluated | 2026-04-16 | ❌ | [143](reports/143-arize-ai-sales-engineer-us-2026-04-16.md) | Good fit |
 `
 
 	applicationsPath := filepath.Join(dataDir, "applications.md")
@@ -58,10 +58,10 @@ func TestParseApplicationsResolvesTrackerRelativeReportLinks(t *testing.T) {
 	// links; both must resolve to the same on-disk report.
 	applications := `# Applications Tracker
 
-| # | Date | Company | Role | Score | Status | PDF | Report | Notes |
-|---|------|---------|------|-------|--------|-----|--------|-------|
-| 1 | 2026-06-03 | Acme | Engineer | 4.0/5 | Evaluated | ✅ | [1](../reports/001-acme-2026-06-03.md) | Tracker-relative link |
-| 2 | 2026-06-03 | Legacy Co | Engineer | 3.0/5 | Evaluated | ❌ | [2](reports/002-legacy-2026-06-03.md) | Legacy root-relative link |
+| # | Date | Company | Role | Score | Status | Last Upd | PDF | Report | Notes |
+|---|------|---------|------|-------|--------|----------|-----|--------|-------|
+| 1 | 2026-06-03 | Acme | Engineer | 4.0/5 | Evaluated | 2026-06-03 | ✅ | [1](../reports/001-acme-2026-06-03.md) | Tracker-relative link |
+| 2 | 2026-06-03 | Legacy Co | Engineer | 3.0/5 | Evaluated | 2026-06-03 | ❌ | [2](reports/002-legacy-2026-06-03.md) | Legacy root-relative link |
 `
 
 	if err := os.WriteFile(filepath.Join(dataDir, "applications.md"), []byte(applications), 0o644); err != nil {
